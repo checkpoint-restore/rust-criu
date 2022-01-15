@@ -1,0 +1,19 @@
+[package]
+name = "rust-criu"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libc = "0.2"
+protobuf = "2.25.2"
+
+[build-dependencies]
+protobuf-codegen-pure = "2.25.2"
+
+[lib]
+name = "rust_criu"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rust-criu-test"
+path = "src/bin.rs"
