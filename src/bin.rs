@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::os::unix::io::AsRawFd;
 
 fn main() {
@@ -8,13 +9,19 @@ fn main() {
         std::process::exit(1);
     }
 
+    let criu_bin_path = String::from(args[1].clone());
+    if !Path::new(&criu_bin_path).is_file() {
+        println!("Invalid path to a criu binary");
+        std::process::exit(1);
+    }
+
     let mut criu = rust_criu::Criu::new().unwrap();
     match criu.get_criu_version() {
         Ok(version) => println!("Version from CRIU found in $PATH: {}", version),
         Err(e) => println!("{:#?}", e),
     };
 
-    criu = rust_criu::Criu::new_with_criu_path(String::from(args[1].clone())).unwrap();
+    criu = rust_criu::Criu::new_with_criu_path(criu_bin_path).unwrap();
     match criu.get_criu_version() {
         Ok(version) => println!("Version from {}: {}", args[1], version),
         Err(e) => println!("{:#?}", e),
