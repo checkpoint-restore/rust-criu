@@ -16,6 +16,16 @@ pub struct Criu {
     images_dir_fd: i32,
     log_level: i32,
     log_file: Option<String>,
+    external_mounts: Vec<(String, String)>,
+    orphan_pts_master: Option<bool>,
+    root: Option<String>,
+    leave_running: Option<bool>,
+    ext_unix_sk: Option<bool>,
+    shell_job: Option<bool>,
+    tcp_established: Option<bool>,
+    file_locks: Option<bool>,
+    manage_cgroups: Option<bool>,
+    work_dir_fd: i32,
 }
 
 impl Criu {
@@ -31,6 +41,16 @@ impl Criu {
             images_dir_fd: -1,
             log_level: -1,
             log_file: None,
+            external_mounts: Vec::new(),
+            orphan_pts_master: None,
+            root: None,
+            leave_running: None,
+            ext_unix_sk: None,
+            shell_job: None,
+            tcp_established: None,
+            file_locks: None,
+            manage_cgroups: None,
+            work_dir_fd: -1,
         })
     }
 
@@ -128,6 +148,46 @@ impl Criu {
         self.log_file = Some(log_file);
     }
 
+    pub fn set_external_mount(&mut self, key: String, value: String) {
+        self.external_mounts.push((key, value));
+    }
+
+    pub fn set_orphan_pts_master(&mut self, orphan_pts_master: bool) {
+        self.orphan_pts_master = Some(orphan_pts_master);
+    }
+
+    pub fn set_root(&mut self, root: String) {
+        self.root = Some(root);
+    }
+
+    pub fn set_leave_running(&mut self, leave_running: bool) {
+        self.leave_running = Some(leave_running);
+    }
+
+    pub fn set_ext_unix_sk(&mut self, ext_unix_sk: bool) {
+        self.ext_unix_sk = Some(ext_unix_sk);
+    }
+
+    pub fn set_shell_job(&mut self, shell_job: bool) {
+        self.shell_job = Some(shell_job);
+    }
+
+    pub fn set_tcp_established(&mut self, tcp_established: bool) {
+        self.tcp_established = Some(tcp_established);
+    }
+
+    pub fn set_file_locks(&mut self, file_locks: bool) {
+        self.file_locks = Some(file_locks);
+    }
+
+    pub fn set_manage_cgroups(&mut self, manage_cgroups: bool) {
+        self.manage_cgroups = Some(manage_cgroups);
+    }
+
+    pub fn set_work_dir_fd(&mut self, fd: i32) {
+        self.work_dir_fd = fd;
+    }
+
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::criu_opts) {
         if self.pid != -1 {
             criu_opts.set_pid(self.pid);
@@ -144,12 +204,78 @@ impl Criu {
         if self.log_file.is_some() {
             criu_opts.set_log_file(self.log_file.clone().unwrap());
         }
+
+        if !self.external_mounts.is_empty() {
+            let mut external_mounts = protobuf::RepeatedField::new();
+            for e in &self.external_mounts {
+                let mut external_mount = rpc::ext_mount_map::new();
+                external_mount.set_key(e.0.clone());
+                external_mount.set_val(e.1.clone());
+                external_mounts.push(external_mount);
+            }
+            self.external_mounts.clear();
+            criu_opts.set_ext_mnt(external_mounts);
+        }
+
+        if self.orphan_pts_master.is_some() {
+            criu_opts.set_orphan_pts_master(self.orphan_pts_master.unwrap());
+        }
+
+        if self.root.is_some() {
+            criu_opts.set_root(self.root.clone().unwrap());
+        }
+
+        if self.leave_running.is_some() {
+            criu_opts.set_leave_running(self.leave_running.unwrap());
+        }
+
+        if self.ext_unix_sk.is_some() {
+            criu_opts.set_ext_unix_sk(self.ext_unix_sk.unwrap());
+        }
+
+        if self.shell_job.is_some() {
+            criu_opts.set_shell_job(self.shell_job.unwrap());
+        }
+
+        if self.tcp_established.is_some() {
+            criu_opts.set_tcp_established(self.tcp_established.unwrap());
+        }
+
+        if self.file_locks.is_some() {
+            criu_opts.set_file_locks(self.file_locks.unwrap());
+        }
+
+        if self.manage_cgroups.is_some() {
+            criu_opts.set_manage_cgroups(self.manage_cgroups.unwrap());
+        }
+
+        if self.work_dir_fd != -1 {
+            criu_opts.set_work_dir_fd(self.work_dir_fd);
+        }
+    }
+
+    fn clear(&mut self) {
+        self.pid = -1;
+        self.images_dir_fd = -1;
+        self.log_level = -1;
+        self.log_file = None;
+        self.external_mounts = Vec::new();
+        self.orphan_pts_master = None;
+        self.root = None;
+        self.leave_running = None;
+        self.ext_unix_sk = None;
+        self.shell_job = None;
+        self.tcp_established = None;
+        self.file_locks = None;
+        self.manage_cgroups = None;
+        self.work_dir_fd = -1;
     }
 
     pub fn dump(&mut self) -> Result<(), Box<dyn Error>> {
         let mut criu_opts = rpc::criu_opts::default();
         self.fill_criu_opts(&mut criu_opts);
         self.do_swrk_with_response(rpc::criu_req_type::DUMP, Some(criu_opts))?;
+        self.clear();
 
         Ok(())
     }
@@ -158,6 +284,7 @@ impl Criu {
         let mut criu_opts = rpc::criu_opts::default();
         self.fill_criu_opts(&mut criu_opts);
         self.do_swrk_with_response(rpc::criu_req_type::RESTORE, Some(criu_opts))?;
+        self.clear();
 
         Ok(())
     }

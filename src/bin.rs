@@ -47,6 +47,7 @@ fn main() {
 
     let directory = std::fs::File::open(String::from("test/images")).unwrap();
     criu.set_images_dir_fd(directory.as_raw_fd());
+    // Using a non-default log_file name to be able to check if it has been created.
     criu.set_log_file("dumppp.log".to_string());
     criu.set_log_level(4);
     println!("Dumping PID {}", pid);
@@ -58,6 +59,9 @@ fn main() {
         panic!("Error: Expected log file 'test/images/dumppp.log' missing.");
     }
 
+    // Need to set all values again as everything is being cleared after success.
+    criu.set_images_dir_fd(directory.as_raw_fd());
+    criu.set_log_level(4);
     criu.set_log_file("restoreee.log".to_string());
     println!("Restoring PID {}", pid);
     if let Err(e) = criu.restore() {
