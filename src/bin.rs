@@ -1,5 +1,7 @@
-use std::path::Path;
+#![deny(warnings)]
+
 use std::os::unix::io::AsRawFd;
+use std::path::Path;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -9,7 +11,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    let criu_bin_path = String::from(args[1].clone());
+    let criu_bin_path = args[1].clone();
     if !Path::new(&criu_bin_path).is_file() {
         println!("Invalid path to a criu binary");
         std::process::exit(1);
