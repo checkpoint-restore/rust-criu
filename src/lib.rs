@@ -1,5 +1,6 @@
 mod proto;
 
+use anyhow::{Context, Result};
 use proto::rpc;
 use protobuf::Message;
 use std::error::Error;
@@ -57,7 +58,9 @@ impl Criu {
     pub fn get_criu_version(&mut self) -> Result<u32, Box<dyn Error>> {
         let response = self.do_swrk_with_response(rpc::criu_req_type::VERSION, None)?;
 
-        let mut version: u32 = (response.get_version().get_major_number() * 10000).try_into()?;
+        let mut version: u32 = (response.get_version().get_major_number() * 10000)
+            .try_into()
+            .context("parsing criu version failed")?;
         version += (response.get_version().get_minor_number() * 100) as u32;
         version += response.get_version().get_sublevel() as u32;
 
@@ -90,7 +93,13 @@ impl Criu {
             Command::new(self.criu_path.clone())
                 .arg("swrk")
                 .arg(format!("{}", self.sv[1]))
-                .spawn()?,
+                .spawn()
+                .with_context(|| {
+                    format!(
+                        "executing criu binary for swrk using path {:?} failed",
+                        self.criu_path
+                    )
+                })?,
         );
 
         let mut req = rpc::criu_req::new();
@@ -102,34 +111,61 @@ impl Criu {
 
         let mut f = unsafe { File::from_raw_fd(self.sv[0]) };
 
-        f.write_all(&req.write_to_bytes()?)?;
+        f.write_all(
+            &req.write_to_bytes()
+                .context("writing protobuf request to byte vec failed")?,
+        )
+        .with_context(|| {
+            format!(
+                "writing protobuf request to file (fd : {}) failed",
+                self.sv[0]
+            )
+        })?;
 
         // 2*4096 taken from go-criu
         let mut buffer = [0; 2 * 4096];
 
-        let read = f.read(&mut buffer[..])?;
-        let response: rpc::criu_resp = Message::parse_from_bytes(&buffer[..read as usize])?;
-        if !response.get_success() {
-            criu.unwrap().kill()?;
-            return Err(format!(
-                "CRIU RPC request failed with (message:{} error:{}",
-                response.get_cr_errmsg(),
-                response.get_cr_errno()
+        let read = f.read(&mut buffer[..]).with_context(|| {
+            format!(
+                "reading criu response from file (fd :{}) failed",
+                self.sv[0]
             )
-            .into());
+        })?;
+
+        let response: rpc::criu_resp = Message::parse_from_bytes(&buffer[..read as usize])
+            .context("parsing criu response failed")?;
+
+        if !response.get_success() {
+            criu.unwrap()
+                .kill()
+                .context("killing criu process (due to failed request) failed")?;
+            return Result::Err(
+                format!(
+                    "CRIU RPC request failed with message:{} error:{}",
+                    response.get_cr_errmsg(),
+                    response.get_cr_errno()
+                )
+                .into(),
+            );
         }
 
         if response.get_field_type() != request_type {
-            criu.unwrap().kill()?;
-            return Err(format!(
-                "Unexpected CRIU RPC response ({:?})",
-                response.get_field_type()
-            )
-            .into());
+            criu.unwrap()
+                .kill()
+                .context("killing criu process (due to incorrect response) failed")?;
+            return Result::Err(
+                format!(
+                    "Unexpected CRIU RPC response ({:?})",
+                    response.get_field_type()
+                )
+                .into(),
+            );
         }
 
-        criu.unwrap().kill()?;
-        Ok(response)
+        criu.unwrap()
+            .kill()
+            .context("killing criu process failed")?;
+        Result::Ok(response)
     }
 
     pub fn set_pid(&mut self, pid: i32) {
