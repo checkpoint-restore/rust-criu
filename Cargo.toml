@@ -2,6 +2,10 @@
 name = "rust-criu"
 version = "0.1.0"
 edition = "2021"
+description = "Rust bindings for CRIU"
+repository = "https://github.com/checkpoint-restore/rust-criu"
+readme = "README.md"
+license-file = "LICENSE"
 
 [dependencies]
 libc = "0.2"
