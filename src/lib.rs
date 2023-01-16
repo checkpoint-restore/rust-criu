@@ -1,8 +1,6 @@
-mod proto;
-
 use anyhow::{Context, Result};
-use proto::rpc;
 use protobuf::Message;
+use rust_criu_protobuf::rpc;
 use std::error::Error;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -56,15 +54,15 @@ impl Criu {
     }
 
     pub fn get_criu_version(&mut self) -> Result<u32, Box<dyn Error>> {
-        let response = self.do_swrk_with_response(rpc::criu_req_type::VERSION, None)?;
+        let response = self.do_swrk_with_response(rpc::Criu_req_type::VERSION, None)?;
 
-        let mut version: u32 = (response.get_version().get_major_number() * 10000)
+        let mut version: u32 = (response.version.major_number() * 10000)
             .try_into()
             .context("parsing criu version failed")?;
-        version += (response.get_version().get_minor_number() * 100) as u32;
-        version += response.get_version().get_sublevel() as u32;
+        version += (response.version.minor_number() * 100) as u32;
+        version += response.version.sublevel() as u32;
 
-        if response.get_version().has_gitid() {
+        if response.version.has_gitid() {
             // taken from runc: if it is a git release -> increase minor by 1
             version -= version % 100;
             version += 100;
@@ -75,9 +73,9 @@ impl Criu {
 
     fn do_swrk_with_response(
         &mut self,
-        request_type: rpc::criu_req_type,
-        criu_opts: Option<rpc::criu_opts>,
-    ) -> Result<rpc::criu_resp, Box<dyn Error>> {
+        request_type: rpc::Criu_req_type,
+        criu_opts: Option<rpc::Criu_opts>,
+    ) -> Result<rpc::Criu_resp, Box<dyn Error>> {
         if unsafe {
             libc::socketpair(
                 libc::AF_LOCAL,
@@ -102,11 +100,11 @@ impl Criu {
                 })?,
         );
 
-        let mut req = rpc::criu_req::new();
-        req.set_field_type(request_type);
+        let mut req = rpc::Criu_req::new();
+        req.set_type(request_type);
 
         if let Some(co) = criu_opts {
-            req.set_opts(co);
+            req.opts = protobuf::MessageField::some(co);
         }
 
         let mut f = unsafe { File::from_raw_fd(self.sv[0]) };
@@ -132,33 +130,29 @@ impl Criu {
             )
         })?;
 
-        let response: rpc::criu_resp =
+        let response: rpc::Criu_resp =
             Message::parse_from_bytes(&buffer[..read]).context("parsing criu response failed")?;
 
-        if !response.get_success() {
+        if !response.success() {
             criu.unwrap()
                 .kill()
                 .context("killing criu process (due to failed request) failed")?;
             return Result::Err(
                 format!(
                     "CRIU RPC request failed with message:{} error:{}",
-                    response.get_cr_errmsg(),
-                    response.get_cr_errno()
+                    response.cr_errmsg(),
+                    response.cr_errno()
                 )
                 .into(),
             );
         }
 
-        if response.get_field_type() != request_type {
+        if response.type_() != request_type {
             criu.unwrap()
                 .kill()
                 .context("killing criu process (due to incorrect response) failed")?;
             return Result::Err(
-                format!(
-                    "Unexpected CRIU RPC response ({:?})",
-                    response.get_field_type()
-                )
-                .into(),
+                format!("Unexpected CRIU RPC response ({:?})", response.type_()).into(),
             );
         }
 
@@ -224,7 +218,7 @@ impl Criu {
         self.work_dir_fd = fd;
     }
 
-    fn fill_criu_opts(&mut self, criu_opts: &mut rpc::criu_opts) {
+    fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
         if self.pid != -1 {
             criu_opts.set_pid(self.pid);
         }
@@ -242,15 +236,15 @@ impl Criu {
         }
 
         if !self.external_mounts.is_empty() {
-            let mut external_mounts = protobuf::RepeatedField::new();
+            let mut external_mounts = Vec::new();
             for e in &self.external_mounts {
-                let mut external_mount = rpc::ext_mount_map::new();
+                let mut external_mount = rpc::Ext_mount_map::new();
                 external_mount.set_key(e.0.clone());
                 external_mount.set_val(e.1.clone());
                 external_mounts.push(external_mount);
             }
             self.external_mounts.clear();
-            criu_opts.set_ext_mnt(external_mounts);
+            criu_opts.ext_mnt = external_mounts;
         }
 
         if self.orphan_pts_master.is_some() {
@@ -308,18 +302,18 @@ impl Criu {
     }
 
     pub fn dump(&mut self) -> Result<(), Box<dyn Error>> {
-        let mut criu_opts = rpc::criu_opts::default();
+        let mut criu_opts = rpc::Criu_opts::default();
         self.fill_criu_opts(&mut criu_opts);
-        self.do_swrk_with_response(rpc::criu_req_type::DUMP, Some(criu_opts))?;
+        self.do_swrk_with_response(rpc::Criu_req_type::DUMP, Some(criu_opts))?;
         self.clear();
 
         Ok(())
     }
 
     pub fn restore(&mut self) -> Result<(), Box<dyn Error>> {
-        let mut criu_opts = rpc::criu_opts::default();
+        let mut criu_opts = rpc::Criu_opts::default();
         self.fill_criu_opts(&mut criu_opts);
-        self.do_swrk_with_response(rpc::criu_req_type::RESTORE, Some(criu_opts))?;
+        self.do_swrk_with_response(rpc::Criu_req_type::RESTORE, Some(criu_opts))?;
         self.clear();
 
         Ok(())
