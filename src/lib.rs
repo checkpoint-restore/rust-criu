@@ -132,8 +132,8 @@ impl Criu {
             )
         })?;
 
-        let response: rpc::criu_resp = Message::parse_from_bytes(&buffer[..read as usize])
-            .context("parsing criu response failed")?;
+        let response: rpc::criu_resp =
+            Message::parse_from_bytes(&buffer[..read]).context("parsing criu response failed")?;
 
         if !response.get_success() {
             criu.unwrap()
