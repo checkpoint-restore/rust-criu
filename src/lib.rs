@@ -1,3 +1,5 @@
+mod rust_criu_protobuf;
+
 use anyhow::{Context, Result};
 use protobuf::Message;
 use rust_criu_protobuf::rpc;
