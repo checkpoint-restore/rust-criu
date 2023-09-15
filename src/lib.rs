@@ -89,18 +89,16 @@ impl Criu {
             return Err("libc::socketpair failed".into());
         }
 
-        let criu = Some(
-            Command::new(self.criu_path.clone())
-                .arg("swrk")
-                .arg(format!("{}", self.sv[1]))
-                .spawn()
-                .with_context(|| {
-                    format!(
-                        "executing criu binary for swrk using path {:?} failed",
-                        self.criu_path
-                    )
-                })?,
-        );
+        let mut criu = Command::new(self.criu_path.clone())
+            .arg("swrk")
+            .arg(format!("{}", self.sv[1]))
+            .spawn()
+            .with_context(|| {
+                format!(
+                    "executing criu binary for swrk using path {:?} failed",
+                    self.criu_path
+                )
+            })?;
 
         let mut req = rpc::Criu_req::new();
         req.set_type(request_type);
@@ -136,8 +134,7 @@ impl Criu {
             Message::parse_from_bytes(&buffer[..read]).context("parsing criu response failed")?;
 
         if !response.success() {
-            criu.unwrap()
-                .kill()
+            criu.kill()
                 .context("killing criu process (due to failed request) failed")?;
             return Result::Err(
                 format!(
@@ -150,17 +147,14 @@ impl Criu {
         }
 
         if response.type_() != request_type {
-            criu.unwrap()
-                .kill()
+            criu.kill()
                 .context("killing criu process (due to incorrect response) failed")?;
             return Result::Err(
                 format!("Unexpected CRIU RPC response ({:?})", response.type_()).into(),
             );
         }
 
-        criu.unwrap()
-            .kill()
-            .context("killing criu process failed")?;
+        criu.kill().context("killing criu process failed")?;
         Result::Ok(response)
     }
 
