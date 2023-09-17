@@ -10,6 +10,32 @@ use std::os::unix::io::FromRawFd;
 use std::process::Command;
 
 #[derive(Clone)]
+pub enum CgMode {
+    IGNORE = 0,
+    NONE = 1,
+    PROPS = 2,
+    SOFT = 3,
+    FULL = 4,
+    STRICT = 5,
+    DEFAULT = 6,
+}
+
+impl CgMode {
+    pub fn from(value: i32) -> CgMode {
+        match value {
+            0 => Self::IGNORE,
+            1 => Self::NONE,
+            2 => Self::PROPS,
+            3 => Self::SOFT,
+            4 => Self::FULL,
+            5 => Self::STRICT,
+            6 => Self::DEFAULT,
+            _ => Self::DEFAULT,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Criu {
     criu_path: String,
     sv: [i32; 2],
@@ -27,6 +53,9 @@ pub struct Criu {
     file_locks: Option<bool>,
     manage_cgroups: Option<bool>,
     work_dir_fd: i32,
+    freeze_cgroup: Option<String>,
+    cgroups_mode: Option<CgMode>,
+    cgroup_props: Option<String>,
 }
 
 impl Criu {
@@ -52,6 +81,9 @@ impl Criu {
             file_locks: None,
             manage_cgroups: None,
             work_dir_fd: -1,
+            freeze_cgroup: None,
+            cgroups_mode: None,
+            cgroup_props: None,
         })
     }
 
@@ -214,6 +246,18 @@ impl Criu {
         self.work_dir_fd = fd;
     }
 
+    pub fn set_freeze_cgroup(&mut self, freeze_cgroup: String) {
+        self.freeze_cgroup = Some(freeze_cgroup);
+    }
+
+    pub fn cgroups_mode(&mut self, mode: CgMode) {
+        self.cgroups_mode = Some(mode);
+    }
+
+    pub fn set_cgroup_props(&mut self, props: String) {
+        self.cgroup_props = Some(props);
+    }
+
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
         if self.pid != -1 {
             criu_opts.set_pid(self.pid);
@@ -278,6 +322,27 @@ impl Criu {
         if self.work_dir_fd != -1 {
             criu_opts.set_work_dir_fd(self.work_dir_fd);
         }
+
+        if self.freeze_cgroup.is_some() {
+            criu_opts.set_freeze_cgroup(self.freeze_cgroup.clone().unwrap());
+        }
+
+        if self.cgroups_mode.is_some() {
+            let mode = match self.cgroups_mode.as_ref().unwrap() {
+                CgMode::IGNORE => rpc::Criu_cg_mode::IGNORE,
+                CgMode::NONE => rpc::Criu_cg_mode::CG_NONE,
+                CgMode::PROPS => rpc::Criu_cg_mode::PROPS,
+                CgMode::SOFT => rpc::Criu_cg_mode::SOFT,
+                CgMode::FULL => rpc::Criu_cg_mode::FULL,
+                CgMode::STRICT => rpc::Criu_cg_mode::STRICT,
+                CgMode::DEFAULT => rpc::Criu_cg_mode::DEFAULT,
+            };
+            criu_opts.set_manage_cgroups_mode(mode);
+        }
+
+        if self.cgroup_props.is_some() {
+            criu_opts.set_cgroup_props(self.cgroup_props.clone().unwrap());
+        }
     }
 
     fn clear(&mut self) {
@@ -295,6 +360,9 @@ impl Criu {
         self.file_locks = None;
         self.manage_cgroups = None;
         self.work_dir_fd = -1;
+        self.freeze_cgroup = None;
+        self.cgroups_mode = None;
+        self.cgroup_props = None;
     }
 
     pub fn dump(&mut self) -> Result<(), Box<dyn Error>> {
