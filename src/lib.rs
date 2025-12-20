@@ -1,4 +1,8 @@
+mod notify;
 mod rust_criu_protobuf;
+
+// Re-export Notify trait and NoopNotify (following go-criu design)
+pub use notify::{NoopNotify, Notify};
 
 use anyhow::{Context, Result};
 use protobuf::Message;
@@ -7,7 +11,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::os::unix::io::FromRawFd;
-use std::process::Command;
+use std::process::{Child, Command};
 
 #[derive(Clone)]
 pub enum CgMode {
@@ -56,6 +60,8 @@ pub struct Criu {
     freeze_cgroup: Option<String>,
     cgroups_mode: Option<CgMode>,
     cgroup_props: Option<String>,
+    notify_scripts: Option<bool>,
+    rst_sibling: Option<bool>,
 }
 
 impl Criu {
@@ -84,11 +90,17 @@ impl Criu {
             freeze_cgroup: None,
             cgroups_mode: None,
             cgroup_props: None,
+            notify_scripts: None,
+            rst_sibling: None,
         })
     }
 
     pub fn get_criu_version(&mut self) -> Result<u32, Box<dyn Error>> {
-        let response = self.do_swrk_with_response(rpc::Criu_req_type::VERSION, None)?;
+        let response = self.do_swrk_with_response::<NoopNotify>(
+            rpc::Criu_req_type::VERSION,
+            None,
+            None,
+        )?;
 
         let mut version: u32 = (response.version.major_number() * 10000)
             .try_into()
@@ -105,10 +117,11 @@ impl Criu {
         Ok(version)
     }
 
-    fn do_swrk_with_response(
+    fn do_swrk_with_response<N: Notify>(
         &mut self,
         request_type: rpc::Criu_req_type,
         criu_opts: Option<rpc::Criu_opts>,
+        notify: Option<&mut N>,
     ) -> Result<rpc::Criu_resp, Box<dyn Error>> {
         if unsafe {
             libc::socketpair(
@@ -152,42 +165,117 @@ impl Criu {
             )
         })?;
 
-        // 2*4096 taken from go-criu
-        let mut buffer = [0; 2 * 4096];
+        // Handle responses in a loop (like runc's criuSwrk)
+        // Reference: https://github.com/opencontainers/runc/blob/main/libcontainer/criu_linux.go
+        let response = self.handle_criu_response_loop(&mut f, &mut criu, request_type, notify)?;
 
-        let read = f.read(&mut buffer[..]).with_context(|| {
-            format!(
-                "reading criu response from file (fd :{}) failed",
-                self.sv[0]
-            )
-        })?;
-
-        let response: rpc::Criu_resp =
-            Message::parse_from_bytes(&buffer[..read]).context("parsing criu response failed")?;
-
-        if !response.success() {
-            criu.kill()
-                .context("killing criu process (due to failed request) failed")?;
-            return Result::Err(
-                format!(
-                    "CRIU RPC request failed with message:{} error:{}",
-                    response.cr_errmsg(),
-                    response.cr_errno()
-                )
-                .into(),
-            );
-        }
-
-        if response.type_() != request_type {
-            criu.kill()
-                .context("killing criu process (due to incorrect response) failed")?;
-            return Result::Err(
-                format!("Unexpected CRIU RPC response ({:?})", response.type_()).into(),
-            );
-        }
-
-        criu.kill().context("killing criu process failed")?;
+        let _ = criu.wait();
         Result::Ok(response)
+    }
+
+    /// Handle CRIU responses in a loop, processing NOTIFY messages.
+    /// This is similar to runc's criuSwrk loop.
+    fn handle_criu_response_loop<N: Notify>(
+        &self,
+        f: &mut File,
+        criu: &mut Child,
+        request_type: rpc::Criu_req_type,
+        mut notify: Option<&mut N>,
+    ) -> Result<rpc::Criu_resp, Box<dyn Error>> {
+        // 2*4096 taken from go-criu
+        let mut buffer = [0u8; 2 * 4096];
+
+        loop {
+            let n = f.read(&mut buffer[..]).with_context(|| {
+                format!(
+                    "reading criu response from file (fd :{}) failed",
+                    self.sv[0]
+                )
+            })?;
+
+            if n == 0 {
+                return Err("unexpected EOF from CRIU".into());
+            }
+
+            let response: rpc::Criu_resp =
+                Message::parse_from_bytes(&buffer[..n]).context("parsing criu response failed")?;
+
+            let resp_type = response.type_();
+
+            if !response.success() {
+                criu.kill()
+                    .context("killing criu process (due to failed request) failed")?;
+                return Err(format!(
+                    "criu failed: type {:?} errno {}",
+                    resp_type,
+                    response.cr_errno()
+                ).into());
+            }
+
+            match resp_type {
+                rpc::Criu_req_type::NOTIFY => {
+                    // Handle notification like runc's criuNotifications
+                    if let Some(ref mut nfy) = notify {
+                        self.dispatch_notify(*nfy, &response)?;
+                    }
+
+                    // Send NotifySuccess response (like runc)
+                    let mut notify_req = rpc::Criu_req::new();
+                    notify_req.set_type(rpc::Criu_req_type::NOTIFY);
+                    notify_req.set_notify_success(true);
+
+                    f.write_all(
+                        &notify_req.write_to_bytes()
+                            .context("writing notify success to byte vec failed")?,
+                    )
+                    .context("writing notify success response failed")?;
+
+                    continue; // Continue loop to get next response
+                }
+                rpc::Criu_req_type::DUMP
+                | rpc::Criu_req_type::RESTORE
+                | rpc::Criu_req_type::PRE_DUMP
+                | rpc::Criu_req_type::FEATURE_CHECK
+                | rpc::Criu_req_type::VERSION => {
+                    // Expected response types - break the loop
+                    if resp_type != request_type {
+                        criu.kill()
+                            .context("killing criu process (due to incorrect response) failed")?;
+                        return Err(
+                            format!("Unexpected CRIU RPC response ({:?})", resp_type).into()
+                        );
+                    }
+                    return Ok(response);
+                }
+                _ => {
+                    return Err(format!("unable to parse the response {:?}", resp_type).into());
+                }
+            }
+        }
+    }
+
+    /// Dispatch CRIU notification to appropriate callback.
+    fn dispatch_notify<N: Notify>(
+        &self,
+        notify: &mut N,
+        response: &rpc::Criu_resp,
+    ) -> Result<(), Box<dyn Error>> {
+        let notify_msg = &response.notify;
+        let script = notify_msg.script();
+        let pid = notify_msg.pid();
+
+        match script {
+            "pre-dump" => notify.pre_dump(),
+            "post-dump" => notify.post_dump(),
+            "pre-restore" => notify.pre_restore(),
+            "post-restore" => notify.post_restore(pid),
+            "setup-namespaces" => notify.setup_namespaces(pid),
+            "post-setup-namespaces" => notify.post_setup_namespaces(),
+            "post-resume" => notify.post_resume(),
+            "network-lock" => notify.network_lock(),
+            "network-unlock" => notify.network_unlock(),
+            _ => Ok(()), // Ignore unknown notifications
+        }
     }
 
     pub fn set_pid(&mut self, pid: i32) {
@@ -256,6 +344,18 @@ impl Criu {
 
     pub fn set_cgroup_props(&mut self, props: String) {
         self.cgroup_props = Some(props);
+    }
+
+    pub fn set_notify_scripts(&mut self, notify_scripts: bool) {
+        self.notify_scripts = Some(notify_scripts);
+    }
+
+    /// Set rst_sibling option.
+    /// When true, the restored process becomes a sibling of the CRIU process
+    /// rather than a child. This is required for proper process management
+    /// when using swrk mode.
+    pub fn set_rst_sibling(&mut self, rst_sibling: bool) {
+        self.rst_sibling = Some(rst_sibling);
     }
 
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
@@ -343,6 +443,14 @@ impl Criu {
         if let Some(ref cgroup_props) = self.cgroup_props {
             criu_opts.set_cgroup_props(cgroup_props.clone());
         }
+
+        if self.notify_scripts.is_some() {
+            criu_opts.set_notify_scripts(self.notify_scripts.unwrap());
+        }
+
+        if self.rst_sibling.is_some() {
+            criu_opts.set_rst_sibling(self.rst_sibling.unwrap());
+        }
     }
 
     fn clear(&mut self) {
@@ -363,23 +471,36 @@ impl Criu {
         self.freeze_cgroup = None;
         self.cgroups_mode = None;
         self.cgroup_props = None;
+        self.notify_scripts = None;
+        self.rst_sibling = None;
     }
 
+    /// Dump (checkpoint) a process without notification callbacks.
     pub fn dump(&mut self) -> Result<(), Box<dyn Error>> {
+        self.dump_notify::<NoopNotify>(None)
+    }
+
+    /// Dump (checkpoint) a process with notification callbacks.
+    pub fn dump_notify<N: Notify>(&mut self, notify: Option<&mut N>) -> Result<(), Box<dyn Error>> {
         let mut criu_opts = rpc::Criu_opts::default();
         self.fill_criu_opts(&mut criu_opts);
-        self.do_swrk_with_response(rpc::Criu_req_type::DUMP, Some(criu_opts))?;
+        self.do_swrk_with_response(rpc::Criu_req_type::DUMP, Some(criu_opts), notify)?;
         self.clear();
 
         Ok(())
     }
 
+    /// Restore a process without notification callbacks.
     pub fn restore(&mut self) -> Result<(), Box<dyn Error>> {
+        self.restore_notify::<NoopNotify>(None)
+    }
+
+    /// Restore a process with notification callbacks.
+    pub fn restore_notify<N: Notify>(&mut self, notify: Option<&mut N>) -> Result<(), Box<dyn Error>> {
         let mut criu_opts = rpc::Criu_opts::default();
         self.fill_criu_opts(&mut criu_opts);
-        self.do_swrk_with_response(rpc::Criu_req_type::RESTORE, Some(criu_opts))?;
+        self.do_swrk_with_response(rpc::Criu_req_type::RESTORE, Some(criu_opts), notify)?;
         self.clear();
-
         Ok(())
     }
 }
