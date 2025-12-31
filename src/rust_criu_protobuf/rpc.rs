@@ -1567,6 +1567,8 @@ pub struct Criu_opts {
     // message fields
     // @@protoc_insertion_point(field:criu_opts.images_dir_fd)
     pub images_dir_fd: ::std::option::Option<i32>,
+    // @@protoc_insertion_point(field:criu_opts.images_dir)
+    pub images_dir: ::std::option::Option<::std::string::String>,
     // @@protoc_insertion_point(field:criu_opts.pid)
     pub pid: ::std::option::Option<i32>,
     // @@protoc_insertion_point(field:criu_opts.leave_running)
@@ -1689,6 +1691,20 @@ pub struct Criu_opts {
     pub pidfd_store_sk: ::std::option::Option<i32>,
     // @@protoc_insertion_point(field:criu_opts.lsm_mount_context)
     pub lsm_mount_context: ::std::option::Option<::std::string::String>,
+    // @@protoc_insertion_point(field:criu_opts.network_lock)
+    pub network_lock: ::std::option::Option<::protobuf::EnumOrUnknown<Criu_network_lock_method>>,
+    // @@protoc_insertion_point(field:criu_opts.mntns_compat_mode)
+    pub mntns_compat_mode: ::std::option::Option<bool>,
+    // @@protoc_insertion_point(field:criu_opts.skip_file_rwx_check)
+    pub skip_file_rwx_check: ::std::option::Option<bool>,
+    // @@protoc_insertion_point(field:criu_opts.unprivileged)
+    pub unprivileged: ::std::option::Option<bool>,
+    // @@protoc_insertion_point(field:criu_opts.leave_stopped)
+    pub leave_stopped: ::std::option::Option<bool>,
+    // @@protoc_insertion_point(field:criu_opts.display_stats)
+    pub display_stats: ::std::option::Option<bool>,
+    // @@protoc_insertion_point(field:criu_opts.log_to_stderr)
+    pub log_to_stderr: ::std::option::Option<bool>,
     // special fields
     // @@protoc_insertion_point(special_field:criu_opts.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
@@ -1708,7 +1724,7 @@ impl Criu_opts {
     // required int32 images_dir_fd = 1;
 
     pub fn images_dir_fd(&self) -> i32 {
-        self.images_dir_fd.unwrap_or(0)
+        self.images_dir_fd.unwrap_or(-1i32)
     }
 
     pub fn clear_images_dir_fd(&mut self) {
@@ -1722,6 +1738,42 @@ impl Criu_opts {
     // Param is passed by value, moved
     pub fn set_images_dir_fd(&mut self, v: i32) {
         self.images_dir_fd = ::std::option::Option::Some(v);
+    }
+
+    // optional string images_dir = 68;
+
+    pub fn images_dir(&self) -> &str {
+        match self.images_dir.as_ref() {
+            Some(v) => v,
+            None => "",
+        }
+    }
+
+    pub fn clear_images_dir(&mut self) {
+        self.images_dir = ::std::option::Option::None;
+    }
+
+    pub fn has_images_dir(&self) -> bool {
+        self.images_dir.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_images_dir(&mut self, v: ::std::string::String) {
+        self.images_dir = ::std::option::Option::Some(v);
+    }
+
+    // Mutable pointer to the field.
+    // If field is not initialized, it is initialized with default value first.
+    pub fn mut_images_dir(&mut self) -> &mut ::std::string::String {
+        if self.images_dir.is_none() {
+            self.images_dir = ::std::option::Option::Some(::std::string::String::new());
+        }
+        self.images_dir.as_mut().unwrap()
+    }
+
+    // Take field
+    pub fn take_images_dir(&mut self) -> ::std::string::String {
+        self.images_dir.take().unwrap_or_else(|| ::std::string::String::new())
     }
 
     // optional int32 pid = 2;
@@ -2880,13 +2932,154 @@ impl Criu_opts {
         self.lsm_mount_context.take().unwrap_or_else(|| ::std::string::String::new())
     }
 
+    // optional .criu_network_lock_method network_lock = 64;
+
+    pub fn network_lock(&self) -> Criu_network_lock_method {
+        match self.network_lock {
+            Some(e) => e.enum_value_or(Criu_network_lock_method::IPTABLES),
+            None => Criu_network_lock_method::IPTABLES,
+        }
+    }
+
+    pub fn clear_network_lock(&mut self) {
+        self.network_lock = ::std::option::Option::None;
+    }
+
+    pub fn has_network_lock(&self) -> bool {
+        self.network_lock.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_network_lock(&mut self, v: Criu_network_lock_method) {
+        self.network_lock = ::std::option::Option::Some(::protobuf::EnumOrUnknown::new(v));
+    }
+
+    // optional bool mntns_compat_mode = 65;
+
+    pub fn mntns_compat_mode(&self) -> bool {
+        self.mntns_compat_mode.unwrap_or(false)
+    }
+
+    pub fn clear_mntns_compat_mode(&mut self) {
+        self.mntns_compat_mode = ::std::option::Option::None;
+    }
+
+    pub fn has_mntns_compat_mode(&self) -> bool {
+        self.mntns_compat_mode.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_mntns_compat_mode(&mut self, v: bool) {
+        self.mntns_compat_mode = ::std::option::Option::Some(v);
+    }
+
+    // optional bool skip_file_rwx_check = 66;
+
+    pub fn skip_file_rwx_check(&self) -> bool {
+        self.skip_file_rwx_check.unwrap_or(false)
+    }
+
+    pub fn clear_skip_file_rwx_check(&mut self) {
+        self.skip_file_rwx_check = ::std::option::Option::None;
+    }
+
+    pub fn has_skip_file_rwx_check(&self) -> bool {
+        self.skip_file_rwx_check.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_skip_file_rwx_check(&mut self, v: bool) {
+        self.skip_file_rwx_check = ::std::option::Option::Some(v);
+    }
+
+    // optional bool unprivileged = 67;
+
+    pub fn unprivileged(&self) -> bool {
+        self.unprivileged.unwrap_or(false)
+    }
+
+    pub fn clear_unprivileged(&mut self) {
+        self.unprivileged = ::std::option::Option::None;
+    }
+
+    pub fn has_unprivileged(&self) -> bool {
+        self.unprivileged.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_unprivileged(&mut self, v: bool) {
+        self.unprivileged = ::std::option::Option::Some(v);
+    }
+
+    // optional bool leave_stopped = 69;
+
+    pub fn leave_stopped(&self) -> bool {
+        self.leave_stopped.unwrap_or(false)
+    }
+
+    pub fn clear_leave_stopped(&mut self) {
+        self.leave_stopped = ::std::option::Option::None;
+    }
+
+    pub fn has_leave_stopped(&self) -> bool {
+        self.leave_stopped.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_leave_stopped(&mut self, v: bool) {
+        self.leave_stopped = ::std::option::Option::Some(v);
+    }
+
+    // optional bool display_stats = 70;
+
+    pub fn display_stats(&self) -> bool {
+        self.display_stats.unwrap_or(false)
+    }
+
+    pub fn clear_display_stats(&mut self) {
+        self.display_stats = ::std::option::Option::None;
+    }
+
+    pub fn has_display_stats(&self) -> bool {
+        self.display_stats.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_display_stats(&mut self, v: bool) {
+        self.display_stats = ::std::option::Option::Some(v);
+    }
+
+    // optional bool log_to_stderr = 71;
+
+    pub fn log_to_stderr(&self) -> bool {
+        self.log_to_stderr.unwrap_or(false)
+    }
+
+    pub fn clear_log_to_stderr(&mut self) {
+        self.log_to_stderr = ::std::option::Option::None;
+    }
+
+    pub fn has_log_to_stderr(&self) -> bool {
+        self.log_to_stderr.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_log_to_stderr(&mut self, v: bool) {
+        self.log_to_stderr = ::std::option::Option::Some(v);
+    }
+
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(62);
+        let mut fields = ::std::vec::Vec::with_capacity(70);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
             "images_dir_fd",
             |m: &Criu_opts| { &m.images_dir_fd },
             |m: &mut Criu_opts| { &mut m.images_dir_fd },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "images_dir",
+            |m: &Criu_opts| { &m.images_dir },
+            |m: &mut Criu_opts| { &mut m.images_dir },
         ));
         fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
             "pid",
@@ -3193,6 +3386,41 @@ impl Criu_opts {
             |m: &Criu_opts| { &m.lsm_mount_context },
             |m: &mut Criu_opts| { &mut m.lsm_mount_context },
         ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "network_lock",
+            |m: &Criu_opts| { &m.network_lock },
+            |m: &mut Criu_opts| { &mut m.network_lock },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "mntns_compat_mode",
+            |m: &Criu_opts| { &m.mntns_compat_mode },
+            |m: &mut Criu_opts| { &mut m.mntns_compat_mode },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "skip_file_rwx_check",
+            |m: &Criu_opts| { &m.skip_file_rwx_check },
+            |m: &mut Criu_opts| { &mut m.skip_file_rwx_check },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "unprivileged",
+            |m: &Criu_opts| { &m.unprivileged },
+            |m: &mut Criu_opts| { &mut m.unprivileged },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "leave_stopped",
+            |m: &Criu_opts| { &m.leave_stopped },
+            |m: &mut Criu_opts| { &mut m.leave_stopped },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "display_stats",
+            |m: &Criu_opts| { &m.display_stats },
+            |m: &mut Criu_opts| { &mut m.display_stats },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "log_to_stderr",
+            |m: &Criu_opts| { &m.log_to_stderr },
+            |m: &mut Criu_opts| { &mut m.log_to_stderr },
+        ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<Criu_opts>(
             "criu_opts",
             fields,
@@ -3251,6 +3479,9 @@ impl ::protobuf::Message for Criu_opts {
             match tag {
                 8 => {
                     self.images_dir_fd = ::std::option::Option::Some(is.read_int32()?);
+                },
+                546 => {
+                    self.images_dir = ::std::option::Option::Some(is.read_string()?);
                 },
                 16 => {
                     self.pid = ::std::option::Option::Some(is.read_int32()?);
@@ -3435,6 +3666,27 @@ impl ::protobuf::Message for Criu_opts {
                 506 => {
                     self.lsm_mount_context = ::std::option::Option::Some(is.read_string()?);
                 },
+                512 => {
+                    self.network_lock = ::std::option::Option::Some(is.read_enum_or_unknown()?);
+                },
+                520 => {
+                    self.mntns_compat_mode = ::std::option::Option::Some(is.read_bool()?);
+                },
+                528 => {
+                    self.skip_file_rwx_check = ::std::option::Option::Some(is.read_bool()?);
+                },
+                536 => {
+                    self.unprivileged = ::std::option::Option::Some(is.read_bool()?);
+                },
+                552 => {
+                    self.leave_stopped = ::std::option::Option::Some(is.read_bool()?);
+                },
+                560 => {
+                    self.display_stats = ::std::option::Option::Some(is.read_bool()?);
+                },
+                568 => {
+                    self.log_to_stderr = ::std::option::Option::Some(is.read_bool()?);
+                },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
                 },
@@ -3449,6 +3701,9 @@ impl ::protobuf::Message for Criu_opts {
         let mut my_size = 0;
         if let Some(v) = self.images_dir_fd {
             my_size += ::protobuf::rt::int32_size(1, v);
+        }
+        if let Some(v) = self.images_dir.as_ref() {
+            my_size += ::protobuf::rt::string_size(68, &v);
         }
         if let Some(v) = self.pid {
             my_size += ::protobuf::rt::int32_size(2, v);
@@ -3640,6 +3895,27 @@ impl ::protobuf::Message for Criu_opts {
         if let Some(v) = self.lsm_mount_context.as_ref() {
             my_size += ::protobuf::rt::string_size(63, &v);
         }
+        if let Some(v) = self.network_lock {
+            my_size += ::protobuf::rt::int32_size(64, v.value());
+        }
+        if let Some(v) = self.mntns_compat_mode {
+            my_size += 2 + 1;
+        }
+        if let Some(v) = self.skip_file_rwx_check {
+            my_size += 2 + 1;
+        }
+        if let Some(v) = self.unprivileged {
+            my_size += 2 + 1;
+        }
+        if let Some(v) = self.leave_stopped {
+            my_size += 2 + 1;
+        }
+        if let Some(v) = self.display_stats {
+            my_size += 2 + 1;
+        }
+        if let Some(v) = self.log_to_stderr {
+            my_size += 2 + 1;
+        }
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
@@ -3648,6 +3924,9 @@ impl ::protobuf::Message for Criu_opts {
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
         if let Some(v) = self.images_dir_fd {
             os.write_int32(1, v)?;
+        }
+        if let Some(v) = self.images_dir.as_ref() {
+            os.write_string(68, v)?;
         }
         if let Some(v) = self.pid {
             os.write_int32(2, v)?;
@@ -3832,6 +4111,27 @@ impl ::protobuf::Message for Criu_opts {
         if let Some(v) = self.lsm_mount_context.as_ref() {
             os.write_string(63, v)?;
         }
+        if let Some(v) = self.network_lock {
+            os.write_enum(64, ::protobuf::EnumOrUnknown::value(&v))?;
+        }
+        if let Some(v) = self.mntns_compat_mode {
+            os.write_bool(65, v)?;
+        }
+        if let Some(v) = self.skip_file_rwx_check {
+            os.write_bool(66, v)?;
+        }
+        if let Some(v) = self.unprivileged {
+            os.write_bool(67, v)?;
+        }
+        if let Some(v) = self.leave_stopped {
+            os.write_bool(69, v)?;
+        }
+        if let Some(v) = self.display_stats {
+            os.write_bool(70, v)?;
+        }
+        if let Some(v) = self.log_to_stderr {
+            os.write_bool(71, v)?;
+        }
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
     }
@@ -3850,6 +4150,7 @@ impl ::protobuf::Message for Criu_opts {
 
     fn clear(&mut self) {
         self.images_dir_fd = ::std::option::Option::None;
+        self.images_dir = ::std::option::Option::None;
         self.pid = ::std::option::Option::None;
         self.leave_running = ::std::option::Option::None;
         self.ext_unix_sk = ::std::option::Option::None;
@@ -3911,12 +4212,20 @@ impl ::protobuf::Message for Criu_opts {
         self.pre_dump_mode = ::std::option::Option::None;
         self.pidfd_store_sk = ::std::option::Option::None;
         self.lsm_mount_context = ::std::option::Option::None;
+        self.network_lock = ::std::option::Option::None;
+        self.mntns_compat_mode = ::std::option::Option::None;
+        self.skip_file_rwx_check = ::std::option::Option::None;
+        self.unprivileged = ::std::option::Option::None;
+        self.leave_stopped = ::std::option::Option::None;
+        self.display_stats = ::std::option::Option::None;
+        self.log_to_stderr = ::std::option::Option::None;
         self.special_fields.clear();
     }
 
     fn default_instance() -> &'static Criu_opts {
         static instance: Criu_opts = Criu_opts {
             images_dir_fd: ::std::option::Option::None,
+            images_dir: ::std::option::Option::None,
             pid: ::std::option::Option::None,
             leave_running: ::std::option::Option::None,
             ext_unix_sk: ::std::option::Option::None,
@@ -3978,6 +4287,13 @@ impl ::protobuf::Message for Criu_opts {
             pre_dump_mode: ::std::option::Option::None,
             pidfd_store_sk: ::std::option::Option::None,
             lsm_mount_context: ::std::option::Option::None,
+            network_lock: ::std::option::Option::None,
+            mntns_compat_mode: ::std::option::Option::None,
+            skip_file_rwx_check: ::std::option::Option::None,
+            unprivileged: ::std::option::Option::None,
+            leave_stopped: ::std::option::Option::None,
+            display_stats: ::std::option::Option::None,
+            log_to_stderr: ::std::option::Option::None,
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
@@ -5915,6 +6231,78 @@ impl Criu_cg_mode {
 }
 
 #[derive(Clone,Copy,PartialEq,Eq,Debug,Hash)]
+// @@protoc_insertion_point(enum:criu_network_lock_method)
+pub enum Criu_network_lock_method {
+    // @@protoc_insertion_point(enum_value:criu_network_lock_method.IPTABLES)
+    IPTABLES = 1,
+    // @@protoc_insertion_point(enum_value:criu_network_lock_method.NFTABLES)
+    NFTABLES = 2,
+    // @@protoc_insertion_point(enum_value:criu_network_lock_method.SKIP)
+    SKIP = 3,
+}
+
+impl ::protobuf::Enum for Criu_network_lock_method {
+    const NAME: &'static str = "criu_network_lock_method";
+
+    fn value(&self) -> i32 {
+        *self as i32
+    }
+
+    fn from_i32(value: i32) -> ::std::option::Option<Criu_network_lock_method> {
+        match value {
+            1 => ::std::option::Option::Some(Criu_network_lock_method::IPTABLES),
+            2 => ::std::option::Option::Some(Criu_network_lock_method::NFTABLES),
+            3 => ::std::option::Option::Some(Criu_network_lock_method::SKIP),
+            _ => ::std::option::Option::None
+        }
+    }
+
+    fn from_str(str: &str) -> ::std::option::Option<Criu_network_lock_method> {
+        match str {
+            "IPTABLES" => ::std::option::Option::Some(Criu_network_lock_method::IPTABLES),
+            "NFTABLES" => ::std::option::Option::Some(Criu_network_lock_method::NFTABLES),
+            "SKIP" => ::std::option::Option::Some(Criu_network_lock_method::SKIP),
+            _ => ::std::option::Option::None
+        }
+    }
+
+    const VALUES: &'static [Criu_network_lock_method] = &[
+        Criu_network_lock_method::IPTABLES,
+        Criu_network_lock_method::NFTABLES,
+        Criu_network_lock_method::SKIP,
+    ];
+}
+
+impl ::protobuf::EnumFull for Criu_network_lock_method {
+    fn enum_descriptor() -> ::protobuf::reflect::EnumDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::EnumDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().enum_by_package_relative_name("criu_network_lock_method").unwrap()).clone()
+    }
+
+    fn descriptor(&self) -> ::protobuf::reflect::EnumValueDescriptor {
+        let index = match self {
+            Criu_network_lock_method::IPTABLES => 0,
+            Criu_network_lock_method::NFTABLES => 1,
+            Criu_network_lock_method::SKIP => 2,
+        };
+        Self::enum_descriptor().value_by_index(index)
+    }
+}
+
+// Note, `Default` is implemented although default value is not 0
+impl ::std::default::Default for Criu_network_lock_method {
+    fn default() -> Self {
+        Criu_network_lock_method::IPTABLES
+    }
+}
+
+impl Criu_network_lock_method {
+    fn generated_enum_descriptor_data() -> ::protobuf::reflect::GeneratedEnumDescriptorData {
+        ::protobuf::reflect::GeneratedEnumDescriptorData::new::<Criu_network_lock_method>("criu_network_lock_method")
+    }
+}
+
+#[derive(Clone,Copy,PartialEq,Eq,Debug,Hash)]
 // @@protoc_insertion_point(enum:criu_pre_dump_mode)
 pub enum Criu_pre_dump_mode {
     // @@protoc_insertion_point(enum_value:criu_pre_dump_mode.SPLICE)
@@ -6009,6 +6397,8 @@ pub enum Criu_req_type {
     WAIT_PID = 11,
     // @@protoc_insertion_point(enum_value:criu_req_type.PAGE_SERVER_CHLD)
     PAGE_SERVER_CHLD = 12,
+    // @@protoc_insertion_point(enum_value:criu_req_type.SINGLE_PRE_DUMP)
+    SINGLE_PRE_DUMP = 13,
 }
 
 impl ::protobuf::Enum for Criu_req_type {
@@ -6033,6 +6423,7 @@ impl ::protobuf::Enum for Criu_req_type {
             10 => ::std::option::Option::Some(Criu_req_type::VERSION),
             11 => ::std::option::Option::Some(Criu_req_type::WAIT_PID),
             12 => ::std::option::Option::Some(Criu_req_type::PAGE_SERVER_CHLD),
+            13 => ::std::option::Option::Some(Criu_req_type::SINGLE_PRE_DUMP),
             _ => ::std::option::Option::None
         }
     }
@@ -6052,6 +6443,7 @@ impl ::protobuf::Enum for Criu_req_type {
             "VERSION" => ::std::option::Option::Some(Criu_req_type::VERSION),
             "WAIT_PID" => ::std::option::Option::Some(Criu_req_type::WAIT_PID),
             "PAGE_SERVER_CHLD" => ::std::option::Option::Some(Criu_req_type::PAGE_SERVER_CHLD),
+            "SINGLE_PRE_DUMP" => ::std::option::Option::Some(Criu_req_type::SINGLE_PRE_DUMP),
             _ => ::std::option::Option::None
         }
     }
@@ -6070,6 +6462,7 @@ impl ::protobuf::Enum for Criu_req_type {
         Criu_req_type::VERSION,
         Criu_req_type::WAIT_PID,
         Criu_req_type::PAGE_SERVER_CHLD,
+        Criu_req_type::SINGLE_PRE_DUMP,
     ];
 }
 
@@ -6110,95 +6503,105 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     t_fd\x12\x10\n\x03key\x18\x01\x20\x02(\tR\x03key\x12\x0e\n\x02fd\x18\x02\
     \x20\x02(\x05R\x02fd\"5\n\x0bcgroup_root\x12\x12\n\x04ctrl\x18\x01\x20\
     \x01(\tR\x04ctrl\x12\x12\n\x04path\x18\x02\x20\x02(\tR\x04path\"\x1f\n\
-    \x07unix_sk\x12\x14\n\x05inode\x18\x01\x20\x02(\rR\x05inode\"\x8c\x11\n\
-    \tcriu_opts\x12\"\n\rimages_dir_fd\x18\x01\x20\x02(\x05R\x0bimagesDirFd\
-    \x12\x10\n\x03pid\x18\x02\x20\x01(\x05R\x03pid\x12#\n\rleave_running\x18\
-    \x03\x20\x01(\x08R\x0cleaveRunning\x12\x1e\n\x0bext_unix_sk\x18\x04\x20\
-    \x01(\x08R\textUnixSk\x12'\n\x0ftcp_established\x18\x05\x20\x01(\x08R\
-    \x0etcpEstablished\x12'\n\x0fevasive_devices\x18\x06\x20\x01(\x08R\x0eev\
-    asiveDevices\x12\x1b\n\tshell_job\x18\x07\x20\x01(\x08R\x08shellJob\x12\
-    \x1d\n\nfile_locks\x18\x08\x20\x01(\x08R\tfileLocks\x12\x1e\n\tlog_level\
-    \x18\t\x20\x01(\x05:\x012R\x08logLevel\x12\x19\n\x08log_file\x18\n\x20\
-    \x01(\tR\x07logFile\x12&\n\x02ps\x18\x0b\x20\x01(\x0b2\x16.criu_page_ser\
-    ver_infoR\x02ps\x12%\n\x0enotify_scripts\x18\x0c\x20\x01(\x08R\rnotifySc\
-    ripts\x12\x12\n\x04root\x18\r\x20\x01(\tR\x04root\x12\x1d\n\nparent_img\
-    \x18\x0e\x20\x01(\tR\tparentImg\x12\x1b\n\ttrack_mem\x18\x0f\x20\x01(\
-    \x08R\x08trackMem\x12\x1d\n\nauto_dedup\x18\x10\x20\x01(\x08R\tautoDedup\
-    \x12\x1e\n\x0bwork_dir_fd\x18\x11\x20\x01(\x05R\tworkDirFd\x12\x1d\n\nli\
-    nk_remap\x18\x12\x20\x01(\x08R\tlinkRemap\x12%\n\x05veths\x18\x13\x20\
-    \x03(\x0b2\x0f.criu_veth_pairR\x05veths\x12#\n\x07cpu_cap\x18\x14\x20\
-    \x01(\r:\n4294967295R\x06cpuCap\x12\x1f\n\x0bforce_irmap\x18\x15\x20\x01\
-    (\x08R\nforceIrmap\x12\x19\n\x08exec_cmd\x18\x16\x20\x03(\tR\x07execCmd\
-    \x12'\n\x07ext_mnt\x18\x17\x20\x03(\x0b2\x0e.ext_mount_mapR\x06extMnt\
-    \x12%\n\x0emanage_cgroups\x18\x18\x20\x01(\x08R\rmanageCgroups\x12%\n\
-    \x07cg_root\x18\x19\x20\x03(\x0b2\x0c.cgroup_rootR\x06cgRoot\x12\x1f\n\
-    \x0brst_sibling\x18\x1a\x20\x01(\x08R\nrstSibling\x12*\n\ninherit_fd\x18\
-    \x1b\x20\x03(\x0b2\x0b.inherit_fdR\tinheritFd\x12\x20\n\x0cauto_ext_mnt\
-    \x18\x1c\x20\x01(\x08R\nautoExtMnt\x12\x1f\n\x0bext_sharing\x18\x1d\x20\
-    \x01(\x08R\nextSharing\x12\x1f\n\x0bext_masters\x18\x1e\x20\x01(\x08R\ne\
-    xtMasters\x12\x19\n\x08skip_mnt\x18\x1f\x20\x03(\tR\x07skipMnt\x12\x1b\n\
-    \tenable_fs\x18\x20\x20\x03(\tR\x08enableFs\x12(\n\x0bunix_sk_ino\x18!\
-    \x20\x03(\x0b2\x08.unix_skR\tunixSkIno\x12=\n\x13manage_cgroups_mode\x18\
-    \"\x20\x01(\x0e2\r.criu_cg_modeR\x11manageCgroupsMode\x12(\n\x0bghost_li\
-    mit\x18#\x20\x01(\r:\x071048576R\nghostLimit\x12(\n\x10irmap_scan_paths\
-    \x18$\x20\x03(\tR\x0eirmapScanPaths\x12\x1a\n\x08external\x18%\x20\x03(\
-    \tR\x08external\x12\x19\n\x08empty_ns\x18&\x20\x01(\rR\x07emptyNs\x12(\n\
-    \x07join_ns\x18'\x20\x03(\x0b2\x0f.join_namespaceR\x06joinNs\x12!\n\x0cc\
-    group_props\x18)\x20\x01(\tR\x0bcgroupProps\x12*\n\x11cgroup_props_file\
-    \x18*\x20\x01(\tR\x0fcgroupPropsFile\x124\n\x16cgroup_dump_controller\
-    \x18+\x20\x03(\tR\x14cgroupDumpController\x12#\n\rfreeze_cgroup\x18,\x20\
-    \x01(\tR\x0cfreezeCgroup\x12\x18\n\x07timeout\x18-\x20\x01(\rR\x07timeou\
-    t\x12+\n\x12tcp_skip_in_flight\x18.\x20\x01(\x08R\x0ftcpSkipInFlight\x12\
-    !\n\x0cweak_sysctls\x18/\x20\x01(\x08R\x0bweakSysctls\x12\x1d\n\nlazy_pa\
-    ges\x180\x20\x01(\x08R\tlazyPages\x12\x1b\n\tstatus_fd\x181\x20\x01(\x05\
-    R\x08statusFd\x12*\n\x11orphan_pts_master\x182\x20\x01(\x08R\x0forphanPt\
-    sMaster\x12\x1f\n\x0bconfig_file\x183\x20\x01(\tR\nconfigFile\x12\x1b\n\
-    \ttcp_close\x184\x20\x01(\x08R\x08tcpClose\x12\x1f\n\x0blsm_profile\x185\
-    \x20\x01(\tR\nlsmProfile\x12\x1d\n\ntls_cacert\x186\x20\x01(\tR\ttlsCace\
-    rt\x12\x1b\n\ttls_cacrl\x187\x20\x01(\tR\x08tlsCacrl\x12\x19\n\x08tls_ce\
-    rt\x188\x20\x01(\tR\x07tlsCert\x12\x17\n\x07tls_key\x189\x20\x01(\tR\x06\
-    tlsKey\x12\x10\n\x03tls\x18:\x20\x01(\x08R\x03tls\x12'\n\x10tls_no_cn_ve\
-    rify\x18;\x20\x01(\x08R\rtlsNoCnVerify\x12\x1f\n\x0bcgroup_yard\x18<\x20\
-    \x01(\tR\ncgroupYard\x12?\n\rpre_dump_mode\x18=\x20\x01(\x0e2\x13.criu_p\
-    re_dump_mode:\x06SPLICER\x0bpreDumpMode\x12$\n\x0epidfd_store_sk\x18>\
-    \x20\x01(\x05R\x0cpidfdStoreSk\x12*\n\x11lsm_mount_context\x18?\x20\x01(\
-    \tR\x0flsmMountContext\",\n\x0ecriu_dump_resp\x12\x1a\n\x08restored\x18\
-    \x01\x20\x01(\x08R\x08restored\"%\n\x11criu_restore_resp\x12\x10\n\x03pi\
-    d\x18\x01\x20\x02(\x05R\x03pid\"7\n\x0bcriu_notify\x12\x16\n\x06script\
-    \x18\x01\x20\x01(\tR\x06script\x12\x10\n\x03pid\x18\x02\x20\x01(\x05R\
-    \x03pid\"l\n\rcriu_features\x12\x1b\n\tmem_track\x18\x01\x20\x01(\x08R\
-    \x08memTrack\x12\x1d\n\nlazy_pages\x18\x02\x20\x01(\x08R\tlazyPages\x12\
-    \x1f\n\x0bpidfd_store\x18\x03\x20\x01(\x08R\npidfdStore\"\xd0\x01\n\x08c\
-    riu_req\x12\"\n\x04type\x18\x01\x20\x02(\x0e2\x0e.criu_req_typeR\x04type\
-    \x12\x1e\n\x04opts\x18\x02\x20\x01(\x0b2\n.criu_optsR\x04opts\x12%\n\x0e\
-    notify_success\x18\x03\x20\x01(\x08R\rnotifySuccess\x12\x1b\n\tkeep_open\
-    \x18\x04\x20\x01(\x08R\x08keepOpen\x12*\n\x08features\x18\x05\x20\x01(\
-    \x0b2\x0e.criu_featuresR\x08features\x12\x10\n\x03pid\x18\x06\x20\x01(\r\
-    R\x03pid\"\x8f\x03\n\tcriu_resp\x12\"\n\x04type\x18\x01\x20\x02(\x0e2\
-    \x0e.criu_req_typeR\x04type\x12\x18\n\x07success\x18\x02\x20\x02(\x08R\
-    \x07success\x12#\n\x04dump\x18\x03\x20\x01(\x0b2\x0f.criu_dump_respR\x04\
-    dump\x12,\n\x07restore\x18\x04\x20\x01(\x0b2\x12.criu_restore_respR\x07r\
-    estore\x12$\n\x06notify\x18\x05\x20\x01(\x0b2\x0c.criu_notifyR\x06notify\
-    \x12&\n\x02ps\x18\x06\x20\x01(\x0b2\x16.criu_page_server_infoR\x02ps\x12\
-    \x19\n\x08cr_errno\x18\x07\x20\x01(\x05R\x07crErrno\x12*\n\x08features\
-    \x18\x08\x20\x01(\x0b2\x0e.criu_featuresR\x08features\x12\x1b\n\tcr_errm\
-    sg\x18\t\x20\x01(\tR\x08crErrmsg\x12'\n\x07version\x18\n\x20\x01(\x0b2\r\
-    .criu_versionR\x07version\x12\x16\n\x06status\x18\x0b\x20\x01(\x05R\x06s\
-    tatus\"\xb0\x01\n\x0ccriu_version\x12!\n\x0cmajor_number\x18\x01\x20\x02\
-    (\x05R\x0bmajorNumber\x12!\n\x0cminor_number\x18\x02\x20\x02(\x05R\x0bmi\
-    norNumber\x12\x14\n\x05gitid\x18\x03\x20\x01(\tR\x05gitid\x12\x1a\n\x08s\
-    ublevel\x18\x04\x20\x01(\x05R\x08sublevel\x12\x14\n\x05extra\x18\x05\x20\
-    \x01(\x05R\x05extra\x12\x12\n\x04name\x18\x06\x20\x01(\tR\x04name*_\n\
-    \x0ccriu_cg_mode\x12\n\n\x06IGNORE\x10\0\x12\x0b\n\x07CG_NONE\x10\x01\
-    \x12\t\n\x05PROPS\x10\x02\x12\x08\n\x04SOFT\x10\x03\x12\x08\n\x04FULL\
-    \x10\x04\x12\n\n\x06STRICT\x10\x05\x12\x0b\n\x07DEFAULT\x10\x06*-\n\x12c\
-    riu_pre_dump_mode\x12\n\n\x06SPLICE\x10\x01\x12\x0b\n\x07VM_READ\x10\x02\
-    *\xd0\x01\n\rcriu_req_type\x12\t\n\x05EMPTY\x10\0\x12\x08\n\x04DUMP\x10\
-    \x01\x12\x0b\n\x07RESTORE\x10\x02\x12\t\n\x05CHECK\x10\x03\x12\x0c\n\x08\
-    PRE_DUMP\x10\x04\x12\x0f\n\x0bPAGE_SERVER\x10\x05\x12\n\n\x06NOTIFY\x10\
-    \x06\x12\x10\n\x0cCPUINFO_DUMP\x10\x07\x12\x11\n\rCPUINFO_CHECK\x10\x08\
-    \x12\x11\n\rFEATURE_CHECK\x10\t\x12\x0b\n\x07VERSION\x10\n\x12\x0c\n\x08\
-    WAIT_PID\x10\x0b\x12\x14\n\x10PAGE_SERVER_CHLD\x10\x0c\
+    \x07unix_sk\x12\x14\n\x05inode\x18\x01\x20\x02(\rR\x05inode\"\xe4\x13\n\
+    \tcriu_opts\x12&\n\rimages_dir_fd\x18\x01\x20\x02(\x05:\x02-1R\x0bimages\
+    DirFd\x12\x1d\n\nimages_dir\x18D\x20\x01(\tR\timagesDir\x12\x10\n\x03pid\
+    \x18\x02\x20\x01(\x05R\x03pid\x12#\n\rleave_running\x18\x03\x20\x01(\x08\
+    R\x0cleaveRunning\x12\x1e\n\x0bext_unix_sk\x18\x04\x20\x01(\x08R\textUni\
+    xSk\x12'\n\x0ftcp_established\x18\x05\x20\x01(\x08R\x0etcpEstablished\
+    \x12'\n\x0fevasive_devices\x18\x06\x20\x01(\x08R\x0eevasiveDevices\x12\
+    \x1b\n\tshell_job\x18\x07\x20\x01(\x08R\x08shellJob\x12\x1d\n\nfile_lock\
+    s\x18\x08\x20\x01(\x08R\tfileLocks\x12\x1e\n\tlog_level\x18\t\x20\x01(\
+    \x05:\x012R\x08logLevel\x12\x19\n\x08log_file\x18\n\x20\x01(\tR\x07logFi\
+    le\x12&\n\x02ps\x18\x0b\x20\x01(\x0b2\x16.criu_page_server_infoR\x02ps\
+    \x12%\n\x0enotify_scripts\x18\x0c\x20\x01(\x08R\rnotifyScripts\x12\x12\n\
+    \x04root\x18\r\x20\x01(\tR\x04root\x12\x1d\n\nparent_img\x18\x0e\x20\x01\
+    (\tR\tparentImg\x12\x1b\n\ttrack_mem\x18\x0f\x20\x01(\x08R\x08trackMem\
+    \x12\x1d\n\nauto_dedup\x18\x10\x20\x01(\x08R\tautoDedup\x12\x1e\n\x0bwor\
+    k_dir_fd\x18\x11\x20\x01(\x05R\tworkDirFd\x12\x1d\n\nlink_remap\x18\x12\
+    \x20\x01(\x08R\tlinkRemap\x12%\n\x05veths\x18\x13\x20\x03(\x0b2\x0f.criu\
+    _veth_pairR\x05veths\x12#\n\x07cpu_cap\x18\x14\x20\x01(\r:\n4294967295R\
+    \x06cpuCap\x12\x1f\n\x0bforce_irmap\x18\x15\x20\x01(\x08R\nforceIrmap\
+    \x12\x19\n\x08exec_cmd\x18\x16\x20\x03(\tR\x07execCmd\x12'\n\x07ext_mnt\
+    \x18\x17\x20\x03(\x0b2\x0e.ext_mount_mapR\x06extMnt\x12%\n\x0emanage_cgr\
+    oups\x18\x18\x20\x01(\x08R\rmanageCgroups\x12%\n\x07cg_root\x18\x19\x20\
+    \x03(\x0b2\x0c.cgroup_rootR\x06cgRoot\x12\x1f\n\x0brst_sibling\x18\x1a\
+    \x20\x01(\x08R\nrstSibling\x12*\n\ninherit_fd\x18\x1b\x20\x03(\x0b2\x0b.\
+    inherit_fdR\tinheritFd\x12\x20\n\x0cauto_ext_mnt\x18\x1c\x20\x01(\x08R\n\
+    autoExtMnt\x12\x1f\n\x0bext_sharing\x18\x1d\x20\x01(\x08R\nextSharing\
+    \x12\x1f\n\x0bext_masters\x18\x1e\x20\x01(\x08R\nextMasters\x12\x19\n\
+    \x08skip_mnt\x18\x1f\x20\x03(\tR\x07skipMnt\x12\x1b\n\tenable_fs\x18\x20\
+    \x20\x03(\tR\x08enableFs\x12(\n\x0bunix_sk_ino\x18!\x20\x03(\x0b2\x08.un\
+    ix_skR\tunixSkIno\x12=\n\x13manage_cgroups_mode\x18\"\x20\x01(\x0e2\r.cr\
+    iu_cg_modeR\x11manageCgroupsMode\x12(\n\x0bghost_limit\x18#\x20\x01(\r:\
+    \x071048576R\nghostLimit\x12(\n\x10irmap_scan_paths\x18$\x20\x03(\tR\x0e\
+    irmapScanPaths\x12\x1a\n\x08external\x18%\x20\x03(\tR\x08external\x12\
+    \x19\n\x08empty_ns\x18&\x20\x01(\rR\x07emptyNs\x12(\n\x07join_ns\x18'\
+    \x20\x03(\x0b2\x0f.join_namespaceR\x06joinNs\x12!\n\x0ccgroup_props\x18)\
+    \x20\x01(\tR\x0bcgroupProps\x12*\n\x11cgroup_props_file\x18*\x20\x01(\tR\
+    \x0fcgroupPropsFile\x124\n\x16cgroup_dump_controller\x18+\x20\x03(\tR\
+    \x14cgroupDumpController\x12#\n\rfreeze_cgroup\x18,\x20\x01(\tR\x0cfreez\
+    eCgroup\x12\x18\n\x07timeout\x18-\x20\x01(\rR\x07timeout\x12+\n\x12tcp_s\
+    kip_in_flight\x18.\x20\x01(\x08R\x0ftcpSkipInFlight\x12!\n\x0cweak_sysct\
+    ls\x18/\x20\x01(\x08R\x0bweakSysctls\x12\x1d\n\nlazy_pages\x180\x20\x01(\
+    \x08R\tlazyPages\x12\x1b\n\tstatus_fd\x181\x20\x01(\x05R\x08statusFd\x12\
+    *\n\x11orphan_pts_master\x182\x20\x01(\x08R\x0forphanPtsMaster\x12\x1f\n\
+    \x0bconfig_file\x183\x20\x01(\tR\nconfigFile\x12\x1b\n\ttcp_close\x184\
+    \x20\x01(\x08R\x08tcpClose\x12\x1f\n\x0blsm_profile\x185\x20\x01(\tR\nls\
+    mProfile\x12\x1d\n\ntls_cacert\x186\x20\x01(\tR\ttlsCacert\x12\x1b\n\ttl\
+    s_cacrl\x187\x20\x01(\tR\x08tlsCacrl\x12\x19\n\x08tls_cert\x188\x20\x01(\
+    \tR\x07tlsCert\x12\x17\n\x07tls_key\x189\x20\x01(\tR\x06tlsKey\x12\x10\n\
+    \x03tls\x18:\x20\x01(\x08R\x03tls\x12'\n\x10tls_no_cn_verify\x18;\x20\
+    \x01(\x08R\rtlsNoCnVerify\x12\x1f\n\x0bcgroup_yard\x18<\x20\x01(\tR\ncgr\
+    oupYard\x12?\n\rpre_dump_mode\x18=\x20\x01(\x0e2\x13.criu_pre_dump_mode:\
+    \x06SPLICER\x0bpreDumpMode\x12$\n\x0epidfd_store_sk\x18>\x20\x01(\x05R\
+    \x0cpidfdStoreSk\x12*\n\x11lsm_mount_context\x18?\x20\x01(\tR\x0flsmMoun\
+    tContext\x12F\n\x0cnetwork_lock\x18@\x20\x01(\x0e2\x19.criu_network_lock\
+    _method:\x08IPTABLESR\x0bnetworkLock\x12*\n\x11mntns_compat_mode\x18A\
+    \x20\x01(\x08R\x0fmntnsCompatMode\x12-\n\x13skip_file_rwx_check\x18B\x20\
+    \x01(\x08R\x10skipFileRwxCheck\x12\"\n\x0cunprivileged\x18C\x20\x01(\x08\
+    R\x0cunprivileged\x12#\n\rleave_stopped\x18E\x20\x01(\x08R\x0cleaveStopp\
+    ed\x12#\n\rdisplay_stats\x18F\x20\x01(\x08R\x0cdisplayStats\x12\"\n\rlog\
+    _to_stderr\x18G\x20\x01(\x08R\x0blogToStderr\",\n\x0ecriu_dump_resp\x12\
+    \x1a\n\x08restored\x18\x01\x20\x01(\x08R\x08restored\"%\n\x11criu_restor\
+    e_resp\x12\x10\n\x03pid\x18\x01\x20\x02(\x05R\x03pid\"7\n\x0bcriu_notify\
+    \x12\x16\n\x06script\x18\x01\x20\x01(\tR\x06script\x12\x10\n\x03pid\x18\
+    \x02\x20\x01(\x05R\x03pid\"l\n\rcriu_features\x12\x1b\n\tmem_track\x18\
+    \x01\x20\x01(\x08R\x08memTrack\x12\x1d\n\nlazy_pages\x18\x02\x20\x01(\
+    \x08R\tlazyPages\x12\x1f\n\x0bpidfd_store\x18\x03\x20\x01(\x08R\npidfdSt\
+    ore\"\xd0\x01\n\x08criu_req\x12\"\n\x04type\x18\x01\x20\x02(\x0e2\x0e.cr\
+    iu_req_typeR\x04type\x12\x1e\n\x04opts\x18\x02\x20\x01(\x0b2\n.criu_opts\
+    R\x04opts\x12%\n\x0enotify_success\x18\x03\x20\x01(\x08R\rnotifySuccess\
+    \x12\x1b\n\tkeep_open\x18\x04\x20\x01(\x08R\x08keepOpen\x12*\n\x08featur\
+    es\x18\x05\x20\x01(\x0b2\x0e.criu_featuresR\x08features\x12\x10\n\x03pid\
+    \x18\x06\x20\x01(\rR\x03pid\"\x8f\x03\n\tcriu_resp\x12\"\n\x04type\x18\
+    \x01\x20\x02(\x0e2\x0e.criu_req_typeR\x04type\x12\x18\n\x07success\x18\
+    \x02\x20\x02(\x08R\x07success\x12#\n\x04dump\x18\x03\x20\x01(\x0b2\x0f.c\
+    riu_dump_respR\x04dump\x12,\n\x07restore\x18\x04\x20\x01(\x0b2\x12.criu_\
+    restore_respR\x07restore\x12$\n\x06notify\x18\x05\x20\x01(\x0b2\x0c.criu\
+    _notifyR\x06notify\x12&\n\x02ps\x18\x06\x20\x01(\x0b2\x16.criu_page_serv\
+    er_infoR\x02ps\x12\x19\n\x08cr_errno\x18\x07\x20\x01(\x05R\x07crErrno\
+    \x12*\n\x08features\x18\x08\x20\x01(\x0b2\x0e.criu_featuresR\x08features\
+    \x12\x1b\n\tcr_errmsg\x18\t\x20\x01(\tR\x08crErrmsg\x12'\n\x07version\
+    \x18\n\x20\x01(\x0b2\r.criu_versionR\x07version\x12\x16\n\x06status\x18\
+    \x0b\x20\x01(\x05R\x06status\"\xb0\x01\n\x0ccriu_version\x12!\n\x0cmajor\
+    _number\x18\x01\x20\x02(\x05R\x0bmajorNumber\x12!\n\x0cminor_number\x18\
+    \x02\x20\x02(\x05R\x0bminorNumber\x12\x14\n\x05gitid\x18\x03\x20\x01(\tR\
+    \x05gitid\x12\x1a\n\x08sublevel\x18\x04\x20\x01(\x05R\x08sublevel\x12\
+    \x14\n\x05extra\x18\x05\x20\x01(\x05R\x05extra\x12\x12\n\x04name\x18\x06\
+    \x20\x01(\tR\x04name*_\n\x0ccriu_cg_mode\x12\n\n\x06IGNORE\x10\0\x12\x0b\
+    \n\x07CG_NONE\x10\x01\x12\t\n\x05PROPS\x10\x02\x12\x08\n\x04SOFT\x10\x03\
+    \x12\x08\n\x04FULL\x10\x04\x12\n\n\x06STRICT\x10\x05\x12\x0b\n\x07DEFAUL\
+    T\x10\x06*@\n\x18criu_network_lock_method\x12\x0c\n\x08IPTABLES\x10\x01\
+    \x12\x0c\n\x08NFTABLES\x10\x02\x12\x08\n\x04SKIP\x10\x03*-\n\x12criu_pre\
+    _dump_mode\x12\n\n\x06SPLICE\x10\x01\x12\x0b\n\x07VM_READ\x10\x02*\xe5\
+    \x01\n\rcriu_req_type\x12\t\n\x05EMPTY\x10\0\x12\x08\n\x04DUMP\x10\x01\
+    \x12\x0b\n\x07RESTORE\x10\x02\x12\t\n\x05CHECK\x10\x03\x12\x0c\n\x08PRE_\
+    DUMP\x10\x04\x12\x0f\n\x0bPAGE_SERVER\x10\x05\x12\n\n\x06NOTIFY\x10\x06\
+    \x12\x10\n\x0cCPUINFO_DUMP\x10\x07\x12\x11\n\rCPUINFO_CHECK\x10\x08\x12\
+    \x11\n\rFEATURE_CHECK\x10\t\x12\x0b\n\x07VERSION\x10\n\x12\x0c\n\x08WAIT\
+    _PID\x10\x0b\x12\x14\n\x10PAGE_SERVER_CHLD\x10\x0c\x12\x13\n\x0fSINGLE_P\
+    RE_DUMP\x10\r\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file
@@ -6232,8 +6635,9 @@ pub fn file_descriptor() -> &'static ::protobuf::reflect::FileDescriptor {
             messages.push(Criu_req::generated_message_descriptor_data());
             messages.push(Criu_resp::generated_message_descriptor_data());
             messages.push(Criu_version::generated_message_descriptor_data());
-            let mut enums = ::std::vec::Vec::with_capacity(3);
+            let mut enums = ::std::vec::Vec::with_capacity(4);
             enums.push(Criu_cg_mode::generated_enum_descriptor_data());
+            enums.push(Criu_network_lock_method::generated_enum_descriptor_data());
             enums.push(Criu_pre_dump_mode::generated_enum_descriptor_data());
             enums.push(Criu_req_type::generated_enum_descriptor_data());
             ::protobuf::reflect::GeneratedFileDescriptor::new_generated(
