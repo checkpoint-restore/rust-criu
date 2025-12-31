@@ -10,10 +10,10 @@ license-file = "LICENSE"
 [dependencies]
 libc = "0.2"
 anyhow = "1.0.56"
-protobuf = "= 3.7.1"
+protobuf = "= 3.7.2"
 
 [build-dependencies]
-protobuf-codegen = "= 3.7.1"
+protobuf-codegen = "= 3.7.2"
 
 [lib]
 name = "rust_criu"
