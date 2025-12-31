@@ -9,6 +9,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -20,8 +23,9 @@ jobs:
 
     - name: install criu
       run: |
+        sudo apt-get update -y
         # Latest development CRIU
-        sudo apt-get install -y libprotobuf-dev libprotobuf-c-dev protobuf-c-compiler protobuf-compiler python3-protobuf libnl-3-dev libnet1-dev libcap-dev
+        sudo apt-get install -y libprotobuf-dev libprotobuf-c-dev protobuf-c-compiler protobuf-compiler python3-protobuf libnl-3-dev libnet1-dev libcap-dev uuid-dev
         git clone --single-branch -b criu-dev https://github.com/checkpoint-restore/criu.git
         make -C criu -j $(nproc)
         # Latest CRIU release is already part of the github actions image
