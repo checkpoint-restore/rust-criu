@@ -4,6 +4,7 @@
 //! <https://github.com/checkpoint-restore/go-criu/blob/master/notify.go>
 
 use std::error::Error;
+use std::os::unix::io::RawFd;
 
 /// CRIU notification callback trait.
 ///
@@ -54,6 +55,14 @@ pub trait Notify {
 
     /// Called when network can be unlocked.
     fn network_unlock(&mut self) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
+
+    /// Called when CRIU sends the orphan PTY master fd.
+    /// This is used during restore when orphan_pts_master option is set.
+    /// The fd is the PTY master that should be sent to the console socket.
+    fn orphan_pts_master(&mut self, master_fd: RawFd) -> Result<(), Box<dyn Error>> {
+        let _ = master_fd;
         Ok(())
     }
 }

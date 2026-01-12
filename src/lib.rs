@@ -9,9 +9,17 @@ use protobuf::Message;
 use rust_criu_protobuf::rpc;
 use std::error::Error;
 use std::fs::File;
-use std::io::{Read, Write};
-use std::os::unix::io::FromRawFd;
-use std::process::{Child, Command};
+use std::io::{IoSliceMut, Write};
+use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
+use std::os::unix::process::CommandExt;
+use std::process::{Child, Command, Stdio};
+
+/// Options for restoring a process with CRIU.
+#[derive(Default)]
+pub struct RestoreOpts<'a> {
+    /// Extra files to pass to the CRIU subprocess at fd 4, 5, 6, etc.
+    pub extra_files: &'a [RawFd],
+}
 
 #[derive(Clone)]
 pub enum CgMode {
@@ -39,7 +47,6 @@ impl CgMode {
     }
 }
 
-#[derive(Clone)]
 pub struct Criu {
     criu_path: String,
     sv: [i32; 2],
@@ -48,6 +55,8 @@ pub struct Criu {
     log_level: i32,
     log_file: Option<String>,
     external_mounts: Vec<(String, String)>,
+    externals: Vec<String>,
+    inherit_fds: Vec<(String, i32)>,
     orphan_pts_master: Option<bool>,
     root: Option<String>,
     leave_running: Option<bool>,
@@ -78,6 +87,8 @@ impl Criu {
             log_level: -1,
             log_file: None,
             external_mounts: Vec::new(),
+            externals: Vec::new(),
+            inherit_fds: Vec::new(),
             orphan_pts_master: None,
             root: None,
             leave_running: None,
@@ -96,11 +107,8 @@ impl Criu {
     }
 
     pub fn get_criu_version(&mut self) -> Result<u32, Box<dyn Error>> {
-        let response = self.do_swrk_with_response::<NoopNotify>(
-            rpc::Criu_req_type::VERSION,
-            None,
-            None,
-        )?;
+        let response =
+            self.do_swrk_with_response::<NoopNotify>(rpc::Criu_req_type::VERSION, None, None, &[])?;
 
         let mut version: u32 = (response.version.major_number() * 10000)
             .try_into()
@@ -122,6 +130,7 @@ impl Criu {
         request_type: rpc::Criu_req_type,
         criu_opts: Option<rpc::Criu_opts>,
         notify: Option<&mut N>,
+        extra_files: &[RawFd],
     ) -> Result<rpc::Criu_resp, Box<dyn Error>> {
         if unsafe {
             libc::socketpair(
@@ -134,16 +143,78 @@ impl Criu {
             return Err("libc::socketpair failed".into());
         }
 
-        let mut criu = Command::new(self.criu_path.clone())
-            .arg("swrk")
-            .arg(format!("{}", self.sv[1]))
-            .spawn()
-            .with_context(|| {
-                format!(
-                    "executing criu binary for swrk using path {:?} failed",
-                    self.criu_path
-                )
-            })?;
+        // Clone extra_files for use in pre_exec closure
+        let extra_files = extra_files.to_vec();
+
+        let mut cmd = Command::new(self.criu_path.clone());
+        cmd.arg("swrk").arg(format!("{}", self.sv[1]));
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+
+        // Pass extra files to the child process at fd 4, 5, 6, etc.
+        // (fd 3 is used by criu swrk socket)
+        // This mirrors Go's cmd.ExtraFiles functionality.
+        //
+        // Based on Go's syscall/exec_unix.go forkAndExecInChild implementation:
+        // 1. Calculate nextfd - the first fd that's safe for temporary use
+        // 2. Move any source fds that conflict with destination range to nextfd
+        // 3. Dup2 all fds to their final destinations
+        if !extra_files.is_empty() {
+            unsafe {
+                cmd.pre_exec(move || {
+                    let n = extra_files.len();
+                    // Destination fds are 4, 5, 6, ..., 4+n-1
+                    // nextfd is the first fd we can use for temporary storage
+                    let mut nextfd = 4 + n as i32;
+
+                    // Step 1: Move source fds that are in the destination range [4, 4+n)
+                    // to higher fd numbers to avoid conflicts
+                    let mut pipe: Vec<i32> = extra_files.clone();
+                    for (i, fd_slot) in pipe.iter_mut().enumerate() {
+                        let fd = *fd_slot;
+                        // If this fd is in the destination range but not at its final position
+                        if fd >= 4 && fd < 4 + n as i32 && fd != 4 + i as i32 {
+                            // Check if it will be overwritten by another fd
+                            if libc::fcntl(fd, libc::F_SETFD, 0) < 0 {
+                                // fd is already closed or invalid, skip
+                                continue;
+                            }
+                            // Dup to a safe fd number
+                            let new_fd = libc::fcntl(fd, libc::F_DUPFD, nextfd);
+                            if new_fd < 0 {
+                                return Err(std::io::Error::last_os_error());
+                            }
+                            *fd_slot = new_fd;
+                            nextfd = new_fd + 1;
+                        }
+                    }
+
+                    // Step 2: Dup2 all fds to their final destinations
+                    for (i, &src_fd) in pipe.iter().enumerate() {
+                        let dst_fd = 4 + i as i32;
+                        if src_fd == dst_fd {
+                            // Already at the right position, just clear close-on-exec
+                            libc::fcntl(dst_fd, libc::F_SETFD, 0);
+                        } else {
+                            if libc::dup2(src_fd, dst_fd) < 0 {
+                                return Err(std::io::Error::last_os_error());
+                            }
+                            libc::close(src_fd);
+                        }
+                    }
+
+                    Ok(())
+                });
+            }
+        }
+
+        let mut criu = cmd.spawn().with_context(|| {
+            format!(
+                "executing criu binary for swrk using path {:?} failed",
+                self.criu_path
+            )
+        })?;
 
         let mut req = rpc::Criu_req::new();
         req.set_type(request_type);
@@ -175,6 +246,7 @@ impl Criu {
 
     /// Handle CRIU responses in a loop, processing NOTIFY messages.
     /// This is similar to runc's criuSwrk loop.
+    /// Uses recvmsg to receive both data and ancillary data (SCM_RIGHTS for fd passing).
     fn handle_criu_response_loop<N: Notify>(
         &self,
         f: &mut File,
@@ -182,19 +254,42 @@ impl Criu {
         request_type: rpc::Criu_req_type,
         mut notify: Option<&mut N>,
     ) -> Result<rpc::Criu_resp, Box<dyn Error>> {
-        // 2*4096 taken from go-criu
-        let mut buffer = [0u8; 2 * 4096];
+        // 10*4096 taken from runc (larger than go-criu's 2*4096)
+        let mut buffer = [0u8; 10 * 4096];
+        // oob is the abbreviation of out of band data (for SCM_RIGHTS)
+        let mut oob = [0u8; 4096];
+
+        let fd = f.as_raw_fd();
 
         loop {
-            let n = f.read(&mut buffer[..]).with_context(|| {
-                format!(
-                    "reading criu response from file (fd :{}) failed",
-                    self.sv[0]
-                )
-            })?;
+            // Use recvmsg to receive both data and ancillary data
+            let mut iov = [IoSliceMut::new(&mut buffer)];
 
-            if n == 0 {
-                return Err("unexpected EOF from CRIU".into());
+            let (n, received_fds) = unsafe {
+                let mut msg: libc::msghdr = std::mem::zeroed();
+                msg.msg_iov = iov.as_mut_ptr() as *mut libc::iovec;
+                msg.msg_iovlen = 1;
+                msg.msg_control = oob.as_mut_ptr() as *mut libc::c_void;
+                msg.msg_controllen = oob.len();
+
+                let n = libc::recvmsg(fd, &mut msg, 0);
+                if n < 0 {
+                    return Err(
+                        format!("recvmsg failed: {}", std::io::Error::last_os_error()).into(),
+                    );
+                }
+                if n == 0 {
+                    return Err("unexpected EOF from CRIU".into());
+                }
+
+                // Parse any received file descriptors from ancillary data
+                let fds = parse_scm_rights(&oob[..msg.msg_controllen]);
+                (n as usize, fds)
+            };
+
+            // Check if buffer was too small
+            if n == buffer.len() {
+                return Err("buffer is too small for CRIU response".into());
             }
 
             let response: rpc::Criu_resp =
@@ -209,14 +304,15 @@ impl Criu {
                     "criu failed: type {:?} errno {}",
                     resp_type,
                     response.cr_errno()
-                ).into());
+                )
+                .into());
             }
 
             match resp_type {
                 rpc::Criu_req_type::NOTIFY => {
                     // Handle notification like runc's criuNotifications
                     if let Some(ref mut nfy) = notify {
-                        self.dispatch_notify(*nfy, &response)?;
+                        self.dispatch_notify_with_fds(*nfy, &response, &received_fds)?;
                     }
 
                     // Send NotifySuccess response (like runc)
@@ -225,7 +321,8 @@ impl Criu {
                     notify_req.set_notify_success(true);
 
                     f.write_all(
-                        &notify_req.write_to_bytes()
+                        &notify_req
+                            .write_to_bytes()
                             .context("writing notify success to byte vec failed")?,
                     )
                     .context("writing notify success response failed")?;
@@ -254,15 +351,21 @@ impl Criu {
         }
     }
 
-    /// Dispatch CRIU notification to appropriate callback.
-    fn dispatch_notify<N: Notify>(
+    /// Dispatch CRIU notification to appropriate callback with received fds.
+    fn dispatch_notify_with_fds<N: Notify>(
         &self,
         notify: &mut N,
         response: &rpc::Criu_resp,
+        received_fds: &[RawFd],
     ) -> Result<(), Box<dyn Error>> {
         let notify_msg = &response.notify;
         let script = notify_msg.script();
         let pid = notify_msg.pid();
+
+        eprintln!(
+            "[rust-criu] received notification: script={}, pid={}, fds={:?}",
+            script, pid, received_fds
+        );
 
         match script {
             "pre-dump" => notify.pre_dump(),
@@ -274,7 +377,22 @@ impl Criu {
             "post-resume" => notify.post_resume(),
             "network-lock" => notify.network_lock(),
             "network-unlock" => notify.network_unlock(),
-            _ => Ok(()), // Ignore unknown notifications
+            "orphan-pts-master" => {
+                // CRIU sends the PTY master fd via SCM_RIGHTS
+                eprintln!(
+                    "[rust-criu] orphan-pts-master received with {} fds",
+                    received_fds.len()
+                );
+                if let Some(&master_fd) = received_fds.first() {
+                    notify.orphan_pts_master(master_fd)
+                } else {
+                    Err("orphan-pts-master notification without fd".into())
+                }
+            }
+            _ => {
+                eprintln!("[rust-criu] unknown notification: {}", script);
+                Ok(())
+            }
         }
     }
 
@@ -296,6 +414,20 @@ impl Criu {
 
     pub fn set_external_mount(&mut self, key: String, value: String) {
         self.external_mounts.push((key, value));
+    }
+
+    /// Set an external resource for CRIU.
+    /// This is used for resources like network namespaces that should be
+    /// inherited rather than restored.
+    pub fn set_external(&mut self, value: String) {
+        self.externals.push(value);
+    }
+
+    /// Set an inherited file descriptor for CRIU restore.
+    /// This is used to pass file descriptors from the parent process to the
+    /// restored process.
+    pub fn set_inherit_fd(&mut self, key: String, fd: i32) {
+        self.inherit_fds.push((key, fd));
     }
 
     pub fn set_orphan_pts_master(&mut self, orphan_pts_master: bool) {
@@ -387,6 +519,40 @@ impl Criu {
             criu_opts.ext_mnt = external_mounts;
         }
 
+        if !self.externals.is_empty() {
+            criu_opts.external = self.externals.clone();
+            self.externals.clear();
+        }
+
+        if !self.inherit_fds.is_empty() {
+            let mut inherit_fds = Vec::new();
+            for (key, fd) in &self.inherit_fds {
+                let mut inherit_fd = rpc::Inherit_fd::new();
+                inherit_fd.set_key(key.clone());
+                inherit_fd.set_fd(*fd);
+                inherit_fds.push(inherit_fd);
+            }
+            self.inherit_fds.clear();
+            criu_opts.inherit_fd = inherit_fds;
+        }
+
+        if !self.externals.is_empty() {
+            criu_opts.external = self.externals.clone();
+            self.externals.clear();
+        }
+
+        if !self.inherit_fds.is_empty() {
+            let mut inherit_fds = Vec::new();
+            for (key, fd) in &self.inherit_fds {
+                let mut inherit_fd = rpc::Inherit_fd::new();
+                inherit_fd.set_key(key.clone());
+                inherit_fd.set_fd(*fd);
+                inherit_fds.push(inherit_fd);
+            }
+            self.inherit_fds.clear();
+            criu_opts.inherit_fd = inherit_fds;
+        }
+
         if let Some(orphan_pts_master) = self.orphan_pts_master {
             criu_opts.set_orphan_pts_master(orphan_pts_master);
         }
@@ -459,6 +625,8 @@ impl Criu {
         self.log_level = -1;
         self.log_file = None;
         self.external_mounts = Vec::new();
+        self.externals = Vec::new();
+        self.inherit_fds = Vec::new();
         self.orphan_pts_master = None;
         self.root = None;
         self.leave_running = None;
@@ -484,22 +652,31 @@ impl Criu {
     pub fn dump_notify<N: Notify>(&mut self, notify: Option<&mut N>) -> Result<(), Box<dyn Error>> {
         let mut criu_opts = rpc::Criu_opts::default();
         self.fill_criu_opts(&mut criu_opts);
-        self.do_swrk_with_response(rpc::Criu_req_type::DUMP, Some(criu_opts), notify)?;
+        self.do_swrk_with_response(rpc::Criu_req_type::DUMP, Some(criu_opts), notify, &[])?;
         self.clear();
 
         Ok(())
     }
 
     /// Restore a process without notification callbacks.
-    pub fn restore(&mut self) -> Result<(), Box<dyn Error>> {
-        self.restore_notify::<NoopNotify>(None)
+    pub fn restore(&mut self, opts: RestoreOpts) -> Result<(), Box<dyn Error>> {
+        self.restore_notify::<NoopNotify>(None, opts)
     }
 
     /// Restore a process with notification callbacks.
-    pub fn restore_notify<N: Notify>(&mut self, notify: Option<&mut N>) -> Result<(), Box<dyn Error>> {
+    pub fn restore_notify<N: Notify>(
+        &mut self,
+        notify: Option<&mut N>,
+        opts: RestoreOpts,
+    ) -> Result<(), Box<dyn Error>> {
         let mut criu_opts = rpc::Criu_opts::default();
         self.fill_criu_opts(&mut criu_opts);
-        self.do_swrk_with_response(rpc::Criu_req_type::RESTORE, Some(criu_opts), notify)?;
+        self.do_swrk_with_response(
+            rpc::Criu_req_type::RESTORE,
+            Some(criu_opts),
+            notify,
+            opts.extra_files,
+        )?;
         self.clear();
         Ok(())
     }
@@ -510,4 +687,55 @@ impl Drop for Criu {
         unsafe { libc::close(self.sv[0]) };
         unsafe { libc::close(self.sv[1]) };
     }
+}
+
+/// Parse SCM_RIGHTS control messages to extract file descriptors.
+/// Returns a vector of received file descriptors.
+fn parse_scm_rights(cmsg_buffer: &[u8]) -> Vec<RawFd> {
+    let mut fds = Vec::new();
+
+    if cmsg_buffer.is_empty() {
+        return fds;
+    }
+
+    // SAFETY: We're parsing the control message buffer that was filled by recvmsg
+    unsafe {
+        let mut cmsg = libc::CMSG_FIRSTHDR(&libc::msghdr {
+            msg_name: std::ptr::null_mut(),
+            msg_namelen: 0,
+            msg_iov: std::ptr::null_mut(),
+            msg_iovlen: 0,
+            msg_control: cmsg_buffer.as_ptr() as *mut libc::c_void,
+            msg_controllen: cmsg_buffer.len(),
+            msg_flags: 0,
+        });
+
+        while !cmsg.is_null() {
+            if (*cmsg).cmsg_level == libc::SOL_SOCKET && (*cmsg).cmsg_type == libc::SCM_RIGHTS {
+                let data_ptr = libc::CMSG_DATA(cmsg);
+                let data_len = (*cmsg).cmsg_len as usize - libc::CMSG_LEN(0) as usize;
+                let num_fds = data_len / std::mem::size_of::<RawFd>();
+
+                for i in 0..num_fds {
+                    let fd = *(data_ptr as *const RawFd).add(i);
+                    fds.push(fd);
+                }
+            }
+
+            cmsg = libc::CMSG_NXTHDR(
+                &libc::msghdr {
+                    msg_name: std::ptr::null_mut(),
+                    msg_namelen: 0,
+                    msg_iov: std::ptr::null_mut(),
+                    msg_iovlen: 0,
+                    msg_control: cmsg_buffer.as_ptr() as *mut libc::c_void,
+                    msg_controllen: cmsg_buffer.len(),
+                    msg_flags: 0,
+                },
+                cmsg,
+            );
+        }
+    }
+
+    fds
 }
