@@ -1,6 +1,5 @@
 #![deny(warnings)]
 
-use rust_criu::RestoreOpts;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
@@ -65,7 +64,7 @@ fn main() {
     criu.set_log_level(4);
     criu.set_log_file("restoreee.log".to_string());
     println!("Restoring PID {}", pid);
-    if let Err(e) = criu.restore(RestoreOpts::default()) {
+    if let Err(e) = criu.restore() {
         panic!("Restoring process failed with {:#?}", e);
     }
     if !std::path::Path::new("test/images/restoreee.log").exists() {
