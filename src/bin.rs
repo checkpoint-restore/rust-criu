@@ -19,6 +19,21 @@ fn notify_callback(
     0
 }
 
+/// Version check: print CRIU version from $PATH and from the given binary path.
+fn version_test(criu_bin_path: &str) {
+    let mut criu = rust_criu::Criu::new().unwrap();
+    match criu.get_criu_version() {
+        Ok(version) => println!("Version from CRIU found in $PATH: {}", version),
+        Err(e) => println!("{:#?}", e),
+    };
+
+    criu = rust_criu::Criu::new_with_criu_path(criu_bin_path.to_string()).unwrap();
+    match criu.get_criu_version() {
+        Ok(version) => println!("Version from {}: {}", criu_bin_path, version),
+        Err(e) => println!("{:#?}", e),
+    };
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
@@ -33,18 +48,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Version check (original test)
-    let mut criu = rust_criu::Criu::new().unwrap();
-    match criu.get_criu_version() {
-        Ok(version) => println!("Version from CRIU found in $PATH: {}", version),
-        Err(e) => println!("{:#?}", e),
-    };
-
-    criu = rust_criu::Criu::new_with_criu_path(criu_bin_path.clone()).unwrap();
-    match criu.get_criu_version() {
-        Ok(version) => println!("Version from {}: {}", criu_bin_path, version),
-        Err(e) => println!("{:#?}", e),
-    };
+    version_test(&criu_bin_path);
 
     // Basic dump/restore test (original test)
     basic_test(&criu_bin_path);
@@ -160,28 +164,23 @@ fn notify_test(criu_bin_path: &str) {
 
     println!("Dumping PID {} (with notify callback)", pid);
     if let Err(e) = criu.dump() {
-        // Kill child on failure
         unsafe {
             libc::kill(pid, libc::SIGKILL);
         }
         let _ = child.wait();
-        let _ = std::fs::remove_dir_all("test/notify_images");
         panic!("Dumping process failed with {:#?}", e);
     }
 
     if !std::path::Path::new("test/notify_images/dump.log").exists() {
         let _ = child.wait();
-        let _ = std::fs::remove_dir_all("test/notify_images");
         panic!("Error: Expected log file 'test/notify_images/dump.log' missing.");
     }
 
     // Wait for child (CRIU kills it by default)
     let _ = child.wait();
 
-    // Check results
     let actions = ACTIONS_CALLED.load(Ordering::SeqCst);
     if actions == 0 {
-        let _ = std::fs::remove_dir_all("test/notify_images");
         panic!("Notify test failed: no actions called");
     }
 
@@ -192,12 +191,10 @@ fn notify_test(criu_bin_path: &str) {
 
     println!("Restoring PID {} (with notify callback)", pid);
     if let Err(e) = criu.restore() {
-        let _ = std::fs::remove_dir_all("test/notify_images");
         panic!("Restoring process failed with {:#?}", e);
     }
 
     if !std::path::Path::new("test/notify_images/restore.log").exists() {
-        let _ = std::fs::remove_dir_all("test/notify_images");
         panic!("Error: Expected log file 'test/notify_images/restore.log' missing.");
     }
 
@@ -211,9 +208,32 @@ fn notify_test(criu_bin_path: &str) {
     }
 }
 
-/// PTY test with orphan-pts-master support
-/// Based on crun's implementation in src/libcrun/criu.c
-/// Reference: https://github.com/containers/crun/blob/main/src/libcrun/criu.c#L210
+/// Test for orphan-pts-master support (similar to crun's criu_notify at criu.c#L210).
+///
+/// PTY/orphan-pts-master behavior is the same as in the container case (crun):
+/// - Dump: process has PTY slave as stdio; master lives in the parent (runtime).
+///   CRIU checkpoints only the process → master is "orphaned" (not in image).
+/// - Restore: client provides a new PTY master via inherit_fd(key tty[rdev:dev]).
+///   Optional: orphan-pts-master notify callback can send that FD to a console socket
+///   (we have no console socket here; crun does when e.g. re-attaching).
+///
+/// This test uses no namespaces/cgroups/rootfs; only the PTY path is exercised.
+///
+/// PTY and the two processes (test binary + test/loop):
+///
+///   DUMP PHASE:
+///     [test binary] ----master---- [ PTY ] ----slave---- [ test/loop ]
+///          |                           |                     |
+///          |  (holds master,           |  (stdio = 0,1,2)    |  ← CRIU dumps this
+///          |   not checkpointed)       |                     |
+///          |                           |  Master is "orphaned" (stays in parent)
+///
+///   RESTORE PHASE:
+///     [test binary] ----new master---- [ new PTY ] ----slave---- [ restored test/loop ]
+///          |                                  |                         |
+///          |  add_inherit_fd(master,          |  CRIU connects          |  stdio = 0,1,2
+///          |    tty[rdev:dev])                |  restored process       |
+///          |       → CRIU uses this FD        |  to this slave          |
 fn pty_test(criu_bin_path: &str) {
     use std::io::BufRead;
 
@@ -263,13 +283,11 @@ fn pty_test(criu_bin_path: &str) {
             libc::kill(pid, libc::SIGKILL);
         }
         let _ = child.wait();
-        let _ = std::fs::remove_dir_all("test/pty_images");
         panic!("Dumping process failed with {:#?}", e);
     }
 
     if !std::path::Path::new("test/pty_images/pty_dump.log").exists() {
         let _ = child.wait();
-        let _ = std::fs::remove_dir_all("test/pty_images");
         panic!("Error: Expected log file 'test/pty_images/pty_dump.log' missing.");
     }
 
@@ -280,10 +298,7 @@ fn pty_test(criu_bin_path: &str) {
     // Create new PTY for restore
     let restore_pty = match PtyPair::new() {
         Ok(p) => p,
-        Err(e) => {
-            let _ = std::fs::remove_dir_all("test/pty_images");
-            panic!("Creating PTY for restore failed ({:#?})", e);
-        }
+        Err(e) => panic!("Creating PTY for restore failed ({:#?})", e),
     };
 
     // Store PTY master fd for use in notification callback
@@ -296,7 +311,6 @@ fn pty_test(criu_bin_path: &str) {
     // which returns tty[rdev:dev] format for PTY devices
     let mut stat_buf: libc::stat = unsafe { std::mem::zeroed() };
     if unsafe { libc::fstat(restore_pty_master_fd, &mut stat_buf) } != 0 {
-        let _ = std::fs::remove_dir_all("test/pty_images");
         panic!(
             "fstat failed on restore PTY master fd: {}",
             std::io::Error::last_os_error()
@@ -355,12 +369,10 @@ fn pty_test(criu_bin_path: &str) {
 
     println!("Restoring PID {} (with PTY)", pid);
     if let Err(e) = criu.restore() {
-        let _ = std::fs::remove_dir_all("test/pty_images");
         panic!("Restoring process failed with {:#?}", e);
     }
 
     if !std::path::Path::new("test/pty_images/pty_restore.log").exists() {
-        let _ = std::fs::remove_dir_all("test/pty_images");
         panic!("Error: Expected log file 'test/pty_images/pty_restore.log' missing.");
     }
 
@@ -454,14 +466,8 @@ impl PtyPair {
     }
 }
 
-impl Drop for PtyPair {
-    fn drop(&mut self) {
-        // Files will be closed automatically when dropped
-    }
-}
-
-/// Spawn a command with PTY slave as stdio
-/// Returns the child process and the PTY master fd
+/// Spawn a command with PTY slave as stdio (see pty_test DUMP PHASE diagram).
+/// Returns the child process and the PTY pair; parent keeps master, child gets slave as stdin/stdout/stderr.
 pub fn spawn_with_pty_slave(
     cmd: &mut std::process::Command,
 ) -> Result<(std::process::Child, PtyPair), Box<dyn std::error::Error>> {
