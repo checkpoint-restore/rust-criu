@@ -13,6 +13,20 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    container:
+      image: registry.fedoraproject.org/fedora:latest
+    strategy:
+      matrix:
+        target: [shellcheck, shfmt]
+    steps:
+      - name: Install dependencies
+        run: dnf install -y make ShellCheck shfmt
+      - uses: actions/checkout@v4
+      - name: Run make ${{ matrix.target }}
+        run: make ${{ matrix.target }}
+
   test:
     runs-on: ubuntu-24.04
 
