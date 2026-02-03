@@ -271,8 +271,8 @@ impl Criu {
             criu_opts.set_log_level(self.log_level);
         }
 
-        if self.log_file.is_some() {
-            criu_opts.set_log_file(self.log_file.clone().unwrap());
+        if let Some(ref log_file) = self.log_file {
+            criu_opts.set_log_file(log_file.clone());
         }
 
         if !self.external_mounts.is_empty() {
@@ -287,48 +287,48 @@ impl Criu {
             criu_opts.ext_mnt = external_mounts;
         }
 
-        if self.orphan_pts_master.is_some() {
-            criu_opts.set_orphan_pts_master(self.orphan_pts_master.unwrap());
+        if let Some(orphan_pts_master) = self.orphan_pts_master {
+            criu_opts.set_orphan_pts_master(orphan_pts_master);
         }
 
-        if self.root.is_some() {
-            criu_opts.set_root(self.root.clone().unwrap());
+        if let Some(ref root) = self.root {
+            criu_opts.set_root(root.clone());
         }
 
-        if self.leave_running.is_some() {
-            criu_opts.set_leave_running(self.leave_running.unwrap());
+        if let Some(leave_running) = self.leave_running {
+            criu_opts.set_leave_running(leave_running);
         }
 
-        if self.ext_unix_sk.is_some() {
-            criu_opts.set_ext_unix_sk(self.ext_unix_sk.unwrap());
+        if let Some(ext_unix_sk) = self.ext_unix_sk {
+            criu_opts.set_ext_unix_sk(ext_unix_sk);
         }
 
-        if self.shell_job.is_some() {
-            criu_opts.set_shell_job(self.shell_job.unwrap());
+        if let Some(shell_job) = self.shell_job {
+            criu_opts.set_shell_job(shell_job);
         }
 
-        if self.tcp_established.is_some() {
-            criu_opts.set_tcp_established(self.tcp_established.unwrap());
+        if let Some(tcp_established) = self.tcp_established {
+            criu_opts.set_tcp_established(tcp_established);
         }
 
-        if self.file_locks.is_some() {
-            criu_opts.set_file_locks(self.file_locks.unwrap());
+        if let Some(file_locks) = self.file_locks {
+            criu_opts.set_file_locks(file_locks);
         }
 
-        if self.manage_cgroups.is_some() {
-            criu_opts.set_manage_cgroups(self.manage_cgroups.unwrap());
+        if let Some(manage_cgroups) = self.manage_cgroups {
+            criu_opts.set_manage_cgroups(manage_cgroups);
         }
 
         if self.work_dir_fd != -1 {
             criu_opts.set_work_dir_fd(self.work_dir_fd);
         }
 
-        if self.freeze_cgroup.is_some() {
-            criu_opts.set_freeze_cgroup(self.freeze_cgroup.clone().unwrap());
+        if let Some(ref freeze_cgroup) = self.freeze_cgroup {
+            criu_opts.set_freeze_cgroup(freeze_cgroup.clone());
         }
 
-        if self.cgroups_mode.is_some() {
-            let mode = match self.cgroups_mode.as_ref().unwrap() {
+        if let Some(ref cgroups_mode) = self.cgroups_mode {
+            let mode = match cgroups_mode {
                 CgMode::IGNORE => rpc::Criu_cg_mode::IGNORE,
                 CgMode::NONE => rpc::Criu_cg_mode::CG_NONE,
                 CgMode::PROPS => rpc::Criu_cg_mode::PROPS,
@@ -340,8 +340,8 @@ impl Criu {
             criu_opts.set_manage_cgroups_mode(mode);
         }
 
-        if self.cgroup_props.is_some() {
-            criu_opts.set_cgroup_props(self.cgroup_props.clone().unwrap());
+        if let Some(ref cgroup_props) = self.cgroup_props {
+            criu_opts.set_cgroup_props(cgroup_props.clone());
         }
     }
 
