@@ -565,12 +565,12 @@ impl Criu {
             criu_opts.set_cgroup_props(cgroup_props.clone());
         }
 
-        if let Some(v) = self.notify_scripts {
-            criu_opts.set_notify_scripts(v);
+        if let Some(notify_scripts) = self.notify_scripts {
+            criu_opts.set_notify_scripts(notify_scripts);
         }
 
-        if let Some(v) = self.rst_sibling {
-            criu_opts.set_rst_sibling(v);
+        if let Some(rst_sibling) = self.rst_sibling {
+            criu_opts.set_rst_sibling(rst_sibling);
         }
     }
 
