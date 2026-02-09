@@ -9,7 +9,7 @@ license-file = "LICENSE"
 
 [dependencies]
 libc = "0.2"
-anyhow = "1.0.56"
+anyhow = "1.0.101"
 protobuf = "= 3.7.2"
 
 [build-dependencies]
