@@ -11,7 +11,7 @@ use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::process::{Child, Command, Stdio};
 
 /// CRIU notification callback type (libcriu style).
-pub type NotifyCallback = fn(script: &str, notify: &Criu_notify) -> i32;
+pub type NotifyCallback = fn(script: &str, notify: &Criu_notify, fd: Option<RawFd>) -> i32;
 
 #[derive(Clone)]
 pub enum CgMode {
@@ -54,6 +54,9 @@ pub struct Criu {
     /// without CLOEXEC (e.g. crun's `O_RDONLY`) so the child (criu swrk) inherits it; we use that fd number in the RPC.
     inherit_fds: Vec<(RawFd, String)>,
     orphan_pts_master: Option<bool>,
+    /// PTY master fd received via SCM_RIGHTS on "orphan-pts-master" notify.
+    /// Retrieve with take_orphan_pts_master_fd() after restore(). -1 if not received.
+    orphan_pts_master_fd: i32,
     root: Option<String>,
     leave_running: Option<bool>,
     ext_unix_sk: Option<bool>,
@@ -86,6 +89,7 @@ impl Criu {
             externals: Vec::new(),
             inherit_fds: Vec::new(),
             orphan_pts_master: None,
+            orphan_pts_master_fd: -1,
             root: None,
             leave_running: None,
             ext_unix_sk: None,
@@ -202,39 +206,90 @@ impl Criu {
         Ok(())
     }
 
+    /// Receive CRIU response, returning the raw bytes and an optional SCM_RIGHTS fd.
+    /// Mirrors libcriu's recv_resp: MSG_PEEK to size the buffer, MSG_TRUNC on recvmsg,
+    /// EINVAL if cmsg_type != SCM_RIGHTS, ENFILE if MSG_CTRUNC.
+    fn recv_criu_response(fd: RawFd) -> Result<(Vec<u8>, Option<RawFd>), Box<dyn Error>> {
+        // Peek to get the exact data length (mirrors C's recv(..., MSG_TRUNC|MSG_PEEK)).
+        let len = unsafe {
+            let ret = libc::recv(
+                fd,
+                std::ptr::null_mut(),
+                0,
+                libc::MSG_TRUNC | libc::MSG_PEEK,
+            );
+            if ret == -1 {
+                let e = std::io::Error::last_os_error();
+                return Err(format!("can't read response: {}", e).into());
+            }
+            ret as usize
+        };
+
+        let mut data_buf = vec![0u8; len];
+        // Reserve space for exactly one fd in ancillary data (mirrors C's CMSG_LEN(sizeof(int))).
+        let cmsg_len =
+            unsafe { libc::CMSG_LEN(std::mem::size_of::<RawFd>() as libc::c_uint) as usize };
+        let mut cmsg_buf = vec![0u8; cmsg_len];
+
+        let mut iov = libc::iovec {
+            iov_base: data_buf.as_mut_ptr().cast::<libc::c_void>(),
+            iov_len: len,
+        };
+        let mut msg: libc::msghdr = unsafe { std::mem::zeroed() };
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = cmsg_buf.as_mut_ptr().cast::<libc::c_void>();
+        msg.msg_controllen = cmsg_len;
+
+        let n = unsafe {
+            let ret = libc::recvmsg(fd, &mut msg, libc::MSG_TRUNC);
+            if ret == -1 {
+                let e = std::io::Error::last_os_error();
+                return Err(format!("can't read response: {}", e).into());
+            }
+            if ret == 0 {
+                return Err("unexpected EOF from CRIU".into());
+            }
+            ret as usize
+        };
+
+        let mut orphan_fd: Option<RawFd> = None;
+        let cmsg = unsafe { libc::CMSG_FIRSTHDR(&msg) };
+        if !cmsg.is_null() {
+            if unsafe { (*cmsg).cmsg_type } != libc::SCM_RIGHTS {
+                return Err(std::io::Error::from_raw_os_error(libc::EINVAL).into());
+            }
+            if msg.msg_flags & libc::MSG_CTRUNC != 0 {
+                return Err(std::io::Error::from_raw_os_error(libc::ENFILE).into());
+            }
+            let mut fd_val: RawFd = -1;
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    libc::CMSG_DATA(cmsg),
+                    &mut fd_val as *mut RawFd as *mut u8,
+                    std::mem::size_of::<RawFd>(),
+                );
+            }
+            orphan_fd = Some(fd_val);
+        }
+
+        Ok((data_buf[..n].to_vec(), orphan_fd))
+    }
+
     /// Handle CRIU responses in a loop, processing NOTIFY messages.
     fn handle_criu_response_loop(
-        &self,
+        &mut self,
         f: &mut File,
         criu: &mut Child,
         request_type: rpc::Criu_req_type,
     ) -> Result<rpc::Criu_resp, Box<dyn Error>> {
-        // 10*4096 taken from runc (larger than go-criu's 2*4096)
-        let mut buffer = [0u8; 10 * 4096];
         let fd = f.as_raw_fd();
 
         loop {
-            let n = unsafe {
-                let ret = libc::read(fd, buffer.as_mut_ptr() as *mut libc::c_void, buffer.len());
-                if ret < 0 {
-                    return Err(format!("read failed: {}", std::io::Error::last_os_error()).into());
-                }
-                if ret == 0 {
-                    return Err("unexpected EOF from CRIU".into());
-                }
-                ret as usize
-            };
-
-            // Fixed buffer: unlike libcriu we don't use MSG_TRUNC|MSG_PEEK to get
-            // exact message size. If we read a full buffer, we conservatively assume
-            // the message may be larger (more data still in socket) and fail to avoid
-            // parsing truncated protobuf.
-            if n == buffer.len() {
-                return Err("buffer is too small for CRIU response".into());
-            }
+            let (data, scm_fd) = Self::recv_criu_response(fd)?;
 
             let response: rpc::Criu_resp =
-                Message::parse_from_bytes(&buffer[..n]).context("parsing criu response failed")?;
+                Message::parse_from_bytes(&data).context("parsing criu response failed")?;
 
             let resp_type = response.type_();
 
@@ -252,30 +307,36 @@ impl Criu {
             match resp_type {
                 rpc::Criu_req_type::NOTIFY => {
                     // Handle notification like libcriu's send_req_and_recv_resp_sk
-                    let ret = if let Some(cb) = self.notify_cb {
-                        let notify_msg = &response.notify;
-                        cb(notify_msg.script(), notify_msg)
+                    let notify_msg = &response.notify;
+                    let script = notify_msg.script();
+
+                    // Store any SCM_RIGHTS fd (orphan-pts-master delivers master fd this way).
+                    if let Some(received_fd) = scm_fd {
+                        self.orphan_pts_master_fd = received_fd;
+                    }
+
+                    let notify_ret = if let Some(cb) = self.notify_cb {
+                        cb(script, notify_msg, scm_fd)
                     } else {
                         0
                     };
 
-                    // Send notify ack (like libcriu's send_notify_ack)
+                    // Send notify ack (like libcriu's send_notify_ack).
+                    // Mirrors C: ret = send_notify_ack(fd, ret).
+                    // notify_success carries the callback result; ack send success drives loop/exit.
                     let mut notify_req = rpc::Criu_req::new();
                     notify_req.set_type(rpc::Criu_req_type::NOTIFY);
-                    notify_req.set_notify_success(ret == 0);
+                    notify_req.set_notify_success(notify_ret == 0);
 
+                    // Like C: if send_notify_ack fails → exit; if succeeds → goto again.
+                    // If callback failed, CRIU will respond with success=false which is caught below.
                     f.write_all(
                         &notify_req
                             .write_to_bytes()
                             .context("writing notify ack to byte vec failed")?,
                     )
                     .context("writing notify ack response failed")?;
-
-                    if ret != 0 {
-                        return Err(format!("notify callback failed with {}", ret).into());
-                    }
-
-                    continue; // goto again
+                    continue;
                 }
                 rpc::Criu_req_type::DUMP
                 | rpc::Criu_req_type::RESTORE
@@ -335,8 +396,23 @@ impl Criu {
         Ok(())
     }
 
+    /// If set to true, CRIU sends the "orphan-pts-master" notify during restore when the process
+    /// has a controlling TTY; the PTY master fd is stored internally and retrievable via
+    /// `take_orphan_pts_master_fd()` after `restore()` returns.
     pub fn set_orphan_pts_master(&mut self, orphan_pts_master: bool) {
         self.orphan_pts_master = Some(orphan_pts_master);
+    }
+
+    /// Returns the PTY master fd received during the last restore, consuming it.
+    /// Returns None if not received. Caller is responsible for closing the fd.
+    pub fn take_orphan_pts_master_fd(&mut self) -> Option<RawFd> {
+        if self.orphan_pts_master_fd >= 0 {
+            let fd = self.orphan_pts_master_fd;
+            self.orphan_pts_master_fd = -1;
+            Some(fd)
+        } else {
+            None
+        }
     }
 
     pub fn set_root(&mut self, root: String) {
@@ -387,8 +463,7 @@ impl Criu {
         self.notify_scripts = Some(notify_scripts);
     }
 
-    /// Set the notification callback.
-    /// Based on libcriu's criu_set_notify_cb.
+    /// Set the notification callback. Based on libcriu's criu_set_notify_cb.
     pub fn set_notify_cb(&mut self, cb: NotifyCallback) {
         self.notify_cb = Some(cb);
     }
@@ -565,6 +640,61 @@ impl Drop for Criu {
         }
         if self.sv[1] >= 0 {
             unsafe { libc::close(self.sv[1]) };
+        }
+        if self.orphan_pts_master_fd >= 0 {
+            unsafe { libc::close(self.orphan_pts_master_fd) };
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_recv_criu_response() {
+        let mut fds = [-1i32; 2];
+        unsafe { libc::socketpair(libc::AF_LOCAL, libc::SOCK_SEQPACKET, 0, fds.as_mut_ptr()) };
+
+        // Data only (no SCM_RIGHTS): plain send suffices
+        let data1 = [1u8; 10];
+        unsafe { libc::send(fds[0], data1.as_ptr().cast(), data1.len(), 0) };
+        let (data_out, scm_fd) = Criu::recv_criu_response(fds[1]).expect("recv failed");
+        assert_eq!(data_out.len(), 10);
+        assert!(scm_fd.is_none());
+
+        // Data + one fd (SCM_RIGHTS)
+        let open_fd = unsafe { libc::open(c"/dev/null".as_ptr(), libc::O_RDONLY) };
+        assert!(open_fd >= 0);
+        let data2 = [2u8; 8];
+        let mut iov = libc::iovec {
+            iov_base: data2.as_ptr().cast_mut().cast::<libc::c_void>(),
+            iov_len: data2.len(),
+        };
+        let cmsg_space = unsafe { libc::CMSG_SPACE(std::mem::size_of::<RawFd>() as _) as usize };
+        let mut cmsg_buf = vec![0u8; cmsg_space];
+        let mut msg: libc::msghdr = unsafe { std::mem::zeroed() };
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = cmsg_buf.as_mut_ptr().cast::<libc::c_void>();
+        msg.msg_controllen = cmsg_space;
+        unsafe {
+            let cmsg = libc::CMSG_FIRSTHDR(&msg);
+            (*cmsg).cmsg_level = libc::SOL_SOCKET;
+            (*cmsg).cmsg_type = libc::SCM_RIGHTS;
+            (*cmsg).cmsg_len = libc::CMSG_LEN(std::mem::size_of::<RawFd>() as _) as _;
+            *(libc::CMSG_DATA(cmsg) as *mut RawFd) = open_fd;
+            libc::sendmsg(fds[0], &msg, 0);
+            libc::close(open_fd);
+        }
+        let (data_out, scm_fd) = Criu::recv_criu_response(fds[1]).expect("recv failed");
+        assert_eq!(data_out.len(), 8);
+        let received_fd = scm_fd.expect("expected SCM_RIGHTS fd");
+        assert!(received_fd >= 0);
+        unsafe {
+            libc::close(received_fd);
+            libc::close(fds[0]);
+            libc::close(fds[1]);
         }
     }
 }
