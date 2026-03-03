@@ -27,6 +27,13 @@ const EXPECTED_ACTIONS_DUMP_RESTORE: &[&str] = &[
     "post-resume",
 ];
 
+struct ImgDirGuard(&'static str);
+impl Drop for ImgDirGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(self.0);
+    }
+}
+
 /// Action script order test: record script names and verify sequence.
 pub fn action_script_test(criu_bin_path: &str) {
     println!("Running action script test");
@@ -59,6 +66,7 @@ pub fn action_script_test(criu_bin_path: &str) {
             panic!("Creating action_script_images failed: {:#?}", e);
         }
     }
+    let _img_guard = ImgDirGuard("test/action_script_images");
 
     let directory = std::fs::File::open("test/action_script_images").unwrap();
 
@@ -91,17 +99,13 @@ pub fn action_script_test(criu_bin_path: &str) {
         panic!("Restoring process failed with {:#?}", e);
     }
 
-    let recorded = RECORDED_ACTIONS.get().unwrap().lock().unwrap().clone();
-    if recorded != EXPECTED_ACTIONS_DUMP_RESTORE {
-        let _ = std::fs::remove_dir_all("test/action_script_images");
-        panic!(
-            "Action script order mismatch: got {:?}, expected {:?}",
-            recorded, EXPECTED_ACTIONS_DUMP_RESTORE
-        );
-    }
-
     println!("Cleaning up");
-    if let Err(e) = std::fs::remove_dir_all("test/action_script_images") {
-        panic!("Removing test/action_script_images failed with {:#?}", e);
-    }
+    unsafe { libc::kill(pid, libc::SIGKILL) };
+    unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
+
+    let recorded = RECORDED_ACTIONS.get().unwrap().lock().unwrap().clone();
+    assert_eq!(
+        recorded, EXPECTED_ACTIONS_DUMP_RESTORE,
+        "Action script order mismatch"
+    );
 }
