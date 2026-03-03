@@ -48,6 +48,11 @@ pub struct Criu {
     log_level: i32,
     log_file: Option<String>,
     external_mounts: Vec<(String, String)>,
+    /// Generic --external strings, e.g. "net[<inode>]:<path>" for external network namespace.
+    externals: Vec<String>,
+    /// Inherit FDs for restore: (fd, key). Only effective with swrk (binary) mode. The fd must be opened
+    /// without CLOEXEC (e.g. crun's `O_RDONLY`) so the child (criu swrk) inherits it; we use that fd number in the RPC.
+    inherit_fds: Vec<(RawFd, String)>,
     orphan_pts_master: Option<bool>,
     root: Option<String>,
     leave_running: Option<bool>,
@@ -78,6 +83,8 @@ impl Criu {
             log_level: -1,
             log_file: None,
             external_mounts: Vec::new(),
+            externals: Vec::new(),
+            inherit_fds: Vec::new(),
             orphan_pts_master: None,
             root: None,
             leave_running: None,
@@ -135,12 +142,18 @@ impl Criu {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
 
+        // Caller passes fds opened without CLOEXEC; the child (criu swrk) inherits them. We use those fd numbers in the RPC (crun-style).
         let mut criu = cmd.spawn().with_context(|| {
             format!(
                 "executing criu binary for swrk using path {:?} failed",
                 self.criu_path
             )
         })?;
+
+        // Close sv[1] in the parent now that criu swrk has inherited it.
+        // Matches libcriu's close(sks[1]) after fork().
+        unsafe { libc::close(self.sv[1]) };
+        self.sv[1] = -1;
 
         let mut req = rpc::Criu_req::new();
         req.set_type(request_type);
@@ -159,6 +172,7 @@ impl Criu {
             .with_context(|| "sending protobuf request failed".to_string())?;
 
         let mut f = unsafe { File::from_raw_fd(fd) };
+        self.sv[0] = -1;
 
         // Handle responses in a loop (like runc's criuSwrk)
         // Reference: https://github.com/opencontainers/runc/blob/main/libcontainer/criu_linux.go
@@ -305,6 +319,22 @@ impl Criu {
         self.external_mounts.push((key, value));
     }
 
+    /// Add a generic external resource (--external). Format is type-dependent, e.g. `tty[rdev:dev]` for TTY.
+    pub fn add_external(&mut self, external: String) {
+        self.externals.push(external);
+    }
+
+    /// Add an inherited file descriptor for CRIU restore. Inheriting is only supported with swrk (binary) mode.
+    /// The fd must be opened **without CLOEXEC** (e.g. `O_RDONLY` like crun; or clear with `fcntl(fd, F_SETFD, 0)`)
+    /// so the child (criu swrk) inherits it; we use that fd number in the RPC.
+    pub fn add_inherit_fd(&mut self, fd: RawFd, key: String) -> Result<(), Box<dyn Error>> {
+        if fd < 0 {
+            return Err(format!("invalid fd {}: must be >= 0", fd).into());
+        }
+        self.inherit_fds.push((fd, key));
+        Ok(())
+    }
+
     pub fn set_orphan_pts_master(&mut self, orphan_pts_master: bool) {
         self.orphan_pts_master = Some(orphan_pts_master);
     }
@@ -381,15 +411,32 @@ impl Criu {
         }
 
         if !self.external_mounts.is_empty() {
-            let mut external_mounts = Vec::new();
-            for e in &self.external_mounts {
-                let mut external_mount = rpc::Ext_mount_map::new();
-                external_mount.set_key(e.0.clone());
-                external_mount.set_val(e.1.clone());
-                external_mounts.push(external_mount);
-            }
-            self.external_mounts.clear();
-            criu_opts.ext_mnt = external_mounts;
+            criu_opts.ext_mnt = std::mem::take(&mut self.external_mounts)
+                .into_iter()
+                .map(|(key, val)| {
+                    let mut m = rpc::Ext_mount_map::new();
+                    m.set_key(key);
+                    m.set_val(val);
+                    m
+                })
+                .collect();
+        }
+
+        if !self.externals.is_empty() {
+            criu_opts.external = std::mem::take(&mut self.externals);
+        }
+
+        // inherit_fd: only supported with swrk. Use the caller's fd numbers (caller must open without CLOEXEC so child inherits).
+        if !self.inherit_fds.is_empty() {
+            criu_opts.inherit_fd = std::mem::take(&mut self.inherit_fds)
+                .into_iter()
+                .map(|(fd, key)| {
+                    let mut m = rpc::Inherit_fd::new();
+                    m.set_key(key);
+                    m.set_fd(fd);
+                    m
+                })
+                .collect();
         }
 
         if let Some(orphan_pts_master) = self.orphan_pts_master {
@@ -460,6 +507,8 @@ impl Criu {
         self.log_level = -1;
         self.log_file = None;
         self.external_mounts = Vec::new();
+        self.externals = Vec::new();
+        self.inherit_fds = Vec::new();
         self.orphan_pts_master = None;
         self.root = None;
         self.leave_running = None;
@@ -497,9 +546,25 @@ impl Criu {
     }
 }
 
+/// Build the CRIU external key for a namespace type.
+/// Follows runc's criuNsToKey: "extRoot" + capitalize(nsName) + "NS".
+/// Ref: https://github.com/opencontainers/runc/blob/v1.4.0/libcontainer/criu_linux.go
+pub fn criu_ns_to_key(name: &str) -> String {
+    let mut chars = name.chars();
+    let capitalized = match chars.next() {
+        Some(c) => c.to_uppercase().chain(chars).collect::<String>(),
+        None => String::new(),
+    };
+    format!("extRoot{}NS", capitalized)
+}
+
 impl Drop for Criu {
     fn drop(&mut self) {
-        unsafe { libc::close(self.sv[0]) };
-        unsafe { libc::close(self.sv[1]) };
+        if self.sv[0] >= 0 {
+            unsafe { libc::close(self.sv[0]) };
+        }
+        if self.sv[1] >= 0 {
+            unsafe { libc::close(self.sv[1]) };
+        }
     }
 }
