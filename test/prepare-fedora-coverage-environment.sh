@@ -11,7 +11,7 @@
 set -euo pipefail
 
 echo "=== Installing system dependencies ==="
-dnf -y install make gcc protobuf-devel criu llvm git
+dnf -y install make gcc protobuf-devel criu llvm git iproute
 
 echo ""
 echo "=== Installing Rust via rustup ==="
