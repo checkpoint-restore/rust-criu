@@ -7,6 +7,7 @@ use std::path::Path;
 use tests::action_script::action_script_test;
 use tests::basic::basic_test;
 use tests::external_netns::external_netns_test;
+use tests::orphan_pts::orphan_pts_master_test;
 use tests::version::version_test;
 
 fn main() {
@@ -27,4 +28,5 @@ fn main() {
     basic_test(&criu_bin_path);
     action_script_test(&criu_bin_path);
     external_netns_test(&criu_bin_path);
+    orphan_pts_master_test(&criu_bin_path);
 }
