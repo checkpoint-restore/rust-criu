@@ -1,4 +1,5 @@
 /target
 test/piggie
 test/loop
+test/loop_pts
 .coverage

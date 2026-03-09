@@ -18,9 +18,14 @@ fn main() {
             .args(["test/loop.c", "-o", "test/loop"])
             .status()
             .unwrap();
+        std::process::Command::new("gcc")
+            .args(["test/loop_pts.c", "-o", "test/loop_pts"])
+            .status()
+            .unwrap();
     }
     println!("cargo:rerun-if-changed=test/piggie.c");
     println!("cargo:rerun-if-changed=test/loop.c");
+    println!("cargo:rerun-if-changed=test/loop_pts.c");
     println!("cargo:rerun-if-changed=proto/rpc.proto");
     println!("cargo:rerun-if-env-changed=GENERATE_PROTOBUF");
     println!("cargo:rerun-if-env-changed=GENERATE_TEST_PROCESS");
