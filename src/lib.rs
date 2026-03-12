@@ -58,6 +58,7 @@ pub struct Criu {
     leave_running: Option<bool>,
     ext_unix_sk: Option<bool>,
     shell_job: Option<bool>,
+    rst_sibling: Option<bool>,
     tcp_established: Option<bool>,
     file_locks: Option<bool>,
     manage_cgroups: Option<bool>,
@@ -90,6 +91,7 @@ impl Criu {
             leave_running: None,
             ext_unix_sk: None,
             shell_job: None,
+            rst_sibling: None,
             tcp_established: None,
             file_locks: None,
             manage_cgroups: None,
@@ -355,6 +357,10 @@ impl Criu {
         self.shell_job = Some(shell_job);
     }
 
+    pub fn set_rst_sibling(&mut self, rst_sibling: bool) {
+        self.rst_sibling = Some(rst_sibling);
+    }
+
     pub fn set_tcp_established(&mut self, tcp_established: bool) {
         self.tcp_established = Some(tcp_established);
     }
@@ -459,6 +465,10 @@ impl Criu {
             criu_opts.set_shell_job(shell_job);
         }
 
+        if let Some(rst_sibling) = self.rst_sibling {
+            criu_opts.set_rst_sibling(rst_sibling);
+        }
+
         if let Some(tcp_established) = self.tcp_established {
             criu_opts.set_tcp_established(tcp_established);
         }
@@ -514,6 +524,7 @@ impl Criu {
         self.leave_running = None;
         self.ext_unix_sk = None;
         self.shell_job = None;
+        self.rst_sibling = None;
         self.tcp_established = None;
         self.file_locks = None;
         self.manage_cgroups = None;

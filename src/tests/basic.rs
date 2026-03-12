@@ -37,6 +37,7 @@ pub fn basic_test(criu_bin_path: &str) {
     criu.set_images_dir_fd(directory.as_raw_fd());
     criu.set_log_level(4);
     criu.set_log_file("restoreee.log".to_string());
+    criu.set_rst_sibling(true);
 
     println!("Restoring PID {}", pid);
     if let Err(e) = criu.restore() {
