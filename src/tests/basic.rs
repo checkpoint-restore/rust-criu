@@ -24,6 +24,7 @@ pub fn basic_test(criu_bin_path: &str) {
     criu.set_images_dir_fd(directory.as_raw_fd());
     criu.set_log_file("dumppp.log".to_string());
     criu.set_log_level(4);
+    criu.set_tcp_skip_in_flight(true);
 
     println!("Dumping PID {}", pid);
     if let Err(e) = criu.dump() {
