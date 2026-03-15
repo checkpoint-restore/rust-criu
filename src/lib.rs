@@ -68,6 +68,7 @@ pub struct Criu {
     cgroup_props: Option<String>,
     notify_scripts: Option<bool>,
     notify_cb: Option<NotifyCallback>,
+    tcp_skip_in_flight: Option<bool>,
 }
 
 impl Criu {
@@ -101,6 +102,7 @@ impl Criu {
             cgroup_props: None,
             notify_scripts: None,
             notify_cb: None,
+            tcp_skip_in_flight: None,
         })
     }
 
@@ -399,6 +401,10 @@ impl Criu {
         self.notify_cb = Some(cb);
     }
 
+    pub fn set_tcp_skip_in_flight(&mut self, tcp_skip_in_flight: bool) {
+        self.tcp_skip_in_flight = Some(tcp_skip_in_flight);
+    }
+
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
         if self.pid != -1 {
             criu_opts.set_pid(self.pid);
@@ -509,6 +515,10 @@ impl Criu {
         if let Some(notify_scripts) = self.notify_scripts {
             criu_opts.set_notify_scripts(notify_scripts);
         }
+
+        if let Some(tcp_skip_in_flight) = self.tcp_skip_in_flight {
+            criu_opts.set_tcp_skip_in_flight(tcp_skip_in_flight);
+        }
     }
 
     fn clear(&mut self) {
@@ -534,6 +544,7 @@ impl Criu {
         self.cgroup_props = None;
         self.notify_scripts = None;
         self.notify_cb = None;
+        self.tcp_skip_in_flight = None;
     }
 
     /// Dump (checkpoint) a process.
@@ -577,5 +588,29 @@ impl Drop for Criu {
         if self.sv[1] >= 0 {
             unsafe { libc::close(self.sv[1]) };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_tcp_skip_in_flight_fills_criu_opts() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_tcp_skip_in_flight(true);
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(opts.tcp_skip_in_flight());
+    }
+
+    #[test]
+    fn tcp_skip_in_flight_default_not_set() {
+        let mut criu = Criu::new().unwrap();
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(!opts.has_tcp_skip_in_flight());
     }
 }
