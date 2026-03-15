@@ -13,6 +13,26 @@ permissions:
   contents: read
 
 jobs:
+  lint_markdown:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+    - uses: actions/checkout@v6
+    - uses: dorny/paths-filter@v4
+      id: changes
+      with:
+        filters: |
+          md:
+            - '*.md'
+    - name: Lint markdown
+      if: steps.changes.outputs.md == 'true'
+      uses: DavidAnson/markdownlint-cli2-action@v22
+      with:
+        globs: |
+          README.md
+          CONTRIBUTING.md
+
   lint:
     runs-on: ubuntu-latest
     container:
