@@ -1,4 +1,4 @@
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::{Mutex, OnceLock};
 
 /// Recorded script names for action_script_test (corresponds to CRIU test/others/action-script).
@@ -9,6 +9,7 @@ const RECORD_ACTIONS_CALLBACK: rust_criu::NotifyCallback = record_actions_callba
 fn record_actions_callback_impl(
     script: &str,
     _notify: &rust_criu::rust_criu_protobuf::rpc::Criu_notify,
+    _fd: Option<RawFd>,
 ) -> i32 {
     if let Some(m) = RECORDED_ACTIONS.get() {
         m.lock().unwrap().push(script.to_string());
