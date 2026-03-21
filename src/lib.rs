@@ -69,6 +69,7 @@ pub struct Criu {
     notify_scripts: Option<bool>,
     notify_cb: Option<NotifyCallback>,
     tcp_skip_in_flight: Option<bool>,
+    link_remap: Option<bool>,
 }
 
 impl Criu {
@@ -103,6 +104,7 @@ impl Criu {
             notify_scripts: None,
             notify_cb: None,
             tcp_skip_in_flight: None,
+            link_remap: None,
         })
     }
 
@@ -405,6 +407,10 @@ impl Criu {
         self.tcp_skip_in_flight = Some(tcp_skip_in_flight);
     }
 
+    pub fn set_link_remap(&mut self, link_remap: bool) {
+        self.link_remap = Some(link_remap);
+    }
+
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
         if self.pid != -1 {
             criu_opts.set_pid(self.pid);
@@ -519,6 +525,10 @@ impl Criu {
         if let Some(tcp_skip_in_flight) = self.tcp_skip_in_flight {
             criu_opts.set_tcp_skip_in_flight(tcp_skip_in_flight);
         }
+
+        if let Some(link_remap) = self.link_remap {
+            criu_opts.set_link_remap(link_remap);
+        }
     }
 
     fn clear(&mut self) {
@@ -545,6 +555,7 @@ impl Criu {
         self.notify_scripts = None;
         self.notify_cb = None;
         self.tcp_skip_in_flight = None;
+        self.link_remap = None;
     }
 
     /// Dump (checkpoint) a process.
@@ -612,5 +623,24 @@ mod tests {
         let mut opts = rpc::Criu_opts::default();
         criu.fill_criu_opts(&mut opts);
         assert!(!opts.has_tcp_skip_in_flight());
+    }
+
+    #[test]
+    fn set_link_remap_fills_criu_opts() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_link_remap(true);
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(opts.link_remap());
+    }
+
+    #[test]
+    fn link_remap_default_not_set() {
+        let mut criu = Criu::new().unwrap();
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(!opts.has_link_remap());
     }
 }
