@@ -70,6 +70,7 @@ pub struct Criu {
     notify_cb: Option<NotifyCallback>,
     tcp_skip_in_flight: Option<bool>,
     link_remap: Option<bool>,
+    auto_dedup: Option<bool>,
 }
 
 impl Criu {
@@ -105,6 +106,7 @@ impl Criu {
             notify_cb: None,
             tcp_skip_in_flight: None,
             link_remap: None,
+            auto_dedup: None,
         })
     }
 
@@ -411,6 +413,10 @@ impl Criu {
         self.link_remap = Some(link_remap);
     }
 
+    pub fn set_auto_dedup(&mut self, auto_dedup: bool) {
+        self.auto_dedup = Some(auto_dedup);
+    }
+
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
         if self.pid != -1 {
             criu_opts.set_pid(self.pid);
@@ -529,6 +535,10 @@ impl Criu {
         if let Some(link_remap) = self.link_remap {
             criu_opts.set_link_remap(link_remap);
         }
+
+        if let Some(auto_dedup) = self.auto_dedup {
+            criu_opts.set_auto_dedup(auto_dedup);
+        }
     }
 
     fn clear(&mut self) {
@@ -556,6 +566,7 @@ impl Criu {
         self.notify_cb = None;
         self.tcp_skip_in_flight = None;
         self.link_remap = None;
+        self.auto_dedup = None;
     }
 
     /// Dump (checkpoint) a process.
@@ -642,5 +653,24 @@ mod tests {
         let mut opts = rpc::Criu_opts::default();
         criu.fill_criu_opts(&mut opts);
         assert!(!opts.has_link_remap());
+    }
+
+    #[test]
+    fn set_auto_dedup_fills_criu_opts() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_auto_dedup(true);
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(opts.auto_dedup());
+    }
+
+    #[test]
+    fn auto_dedup_default_not_set() {
+        let mut criu = Criu::new().unwrap();
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(!opts.has_auto_dedup());
     }
 }
