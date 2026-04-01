@@ -27,6 +27,7 @@ pub fn basic_test(criu_bin_path: &str) {
     criu.set_tcp_skip_in_flight(true);
     criu.set_link_remap(true);
     criu.set_auto_dedup(true);
+    criu.set_lazy_pages(true);
 
     println!("Dumping PID {}", pid);
     if let Err(e) = criu.dump() {

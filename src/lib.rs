@@ -74,6 +74,7 @@ pub struct Criu {
     link_remap: Option<bool>,
     auto_dedup: Option<bool>,
     parent_img: Option<String>,
+    lazy_pages: Option<bool>,
 }
 
 impl Criu {
@@ -112,6 +113,7 @@ impl Criu {
             link_remap: None,
             auto_dedup: None,
             parent_img: None,
+            lazy_pages: None,
         })
     }
 
@@ -507,6 +509,10 @@ impl Criu {
         self.parent_img = Some(parent_img);
     }
 
+    pub fn set_lazy_pages(&mut self, lazy_pages: bool) {
+        self.lazy_pages = Some(lazy_pages);
+    }
+
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
         if self.pid != -1 {
             criu_opts.set_pid(self.pid);
@@ -633,6 +639,10 @@ impl Criu {
         if let Some(ref parent_img) = self.parent_img {
             criu_opts.set_parent_img(parent_img.clone());
         }
+
+        if let Some(lazy_pages) = self.lazy_pages {
+            criu_opts.set_lazy_pages(lazy_pages);
+        }
     }
 
     fn clear(&mut self) {
@@ -662,6 +672,7 @@ impl Criu {
         self.link_remap = None;
         self.auto_dedup = None;
         self.parent_img = None;
+        self.lazy_pages = None;
     }
 
     /// Dump (checkpoint) a process.
@@ -836,5 +847,24 @@ mod tests {
         let mut opts = rpc::Criu_opts::default();
         criu.fill_criu_opts(&mut opts);
         assert!(!opts.has_parent_img());
+    }
+
+    #[test]
+    fn set_lazy_pages_fills_criu_opts() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_lazy_pages(true);
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(opts.lazy_pages());
+    }
+
+    #[test]
+    fn lazy_pages_default_not_set() {
+        let mut criu = Criu::new().unwrap();
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(!opts.has_lazy_pages());
     }
 }
