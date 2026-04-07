@@ -46,6 +46,11 @@ pub fn basic_test(criu_bin_path: &str) {
         panic!("Restoring process failed with {:#?}", e);
     }
 
+    assert!(
+        criu.take_orphan_pts_master_fd().is_none(),
+        "orphan_pts_master_fd should be None when set_orphan_pts_master is not called"
+    );
+
     if !std::path::Path::new("test/images/restoreee.log").exists() {
         panic!("Error: Expected log file 'test/images/restoreee.log' missing.");
     }
