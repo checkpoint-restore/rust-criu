@@ -73,6 +73,7 @@ pub struct Criu {
     tcp_skip_in_flight: Option<bool>,
     link_remap: Option<bool>,
     auto_dedup: Option<bool>,
+    parent_img: Option<String>,
 }
 
 impl Criu {
@@ -110,6 +111,7 @@ impl Criu {
             tcp_skip_in_flight: None,
             link_remap: None,
             auto_dedup: None,
+            parent_img: None,
         })
     }
 
@@ -501,6 +503,10 @@ impl Criu {
         self.auto_dedup = Some(auto_dedup);
     }
 
+    pub fn set_parent_img(&mut self, parent_img: String) {
+        self.parent_img = Some(parent_img);
+    }
+
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
         if self.pid != -1 {
             criu_opts.set_pid(self.pid);
@@ -623,6 +629,10 @@ impl Criu {
         if let Some(auto_dedup) = self.auto_dedup {
             criu_opts.set_auto_dedup(auto_dedup);
         }
+
+        if let Some(ref parent_img) = self.parent_img {
+            criu_opts.set_parent_img(parent_img.clone());
+        }
     }
 
     fn clear(&mut self) {
@@ -651,6 +661,7 @@ impl Criu {
         self.tcp_skip_in_flight = None;
         self.link_remap = None;
         self.auto_dedup = None;
+        self.parent_img = None;
     }
 
     /// Dump (checkpoint) a process.
@@ -806,5 +817,24 @@ mod tests {
         let mut opts = rpc::Criu_opts::default();
         criu.fill_criu_opts(&mut opts);
         assert!(!opts.has_auto_dedup());
+    }
+
+    #[test]
+    fn set_parent_img_fills_criu_opts() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_parent_img(String::from("/path/to/parent"));
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert_eq!(opts.parent_img(), "/path/to/parent");
+    }
+
+    #[test]
+    fn parent_img_default_not_set() {
+        let mut criu = Criu::new().unwrap();
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(!opts.has_parent_img());
     }
 }
