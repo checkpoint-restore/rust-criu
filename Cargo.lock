@@ -238,10 +238,10 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 name = "rust-criu"
 version = "0.5.0"
 dependencies = [
- "anyhow",
  "libc",
  "protobuf",
  "protobuf-codegen",
+ "thiserror",
 ]
 
 [[package]]

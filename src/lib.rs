@@ -1,10 +1,8 @@
 pub mod rust_criu_protobuf;
 
-use anyhow::{Context, Result};
 use protobuf::Message;
 use rust_criu_protobuf::rpc;
 use rust_criu_protobuf::rpc::Criu_notify;
-use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
@@ -37,6 +35,39 @@ impl CgMode {
             _ => Self::DEFAULT,
         }
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CriuError {
+    #[error("socketpair failed: {0}")]
+    SocketPair(std::io::Error),
+
+    #[error("failed to spawn criu binary at {path:?}: {source}")]
+    Spawn {
+        path: String,
+        source: std::io::Error,
+    },
+
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("{0}")]
+    Protobuf(#[from] protobuf::Error),
+
+    #[error("criu failed: type {resp_type:?} errno {cr_errno}")]
+    RpcFailed { resp_type: String, cr_errno: i32 },
+
+    #[error("unexpected CRIU RPC response ({0:?})")]
+    UnexpectedResponse(String),
+
+    #[error("notify callback failed with {0}")]
+    NotifyFailed(i32),
+
+    #[error("invalid argument: {0}")]
+    InvalidArgument(String),
+
+    #[error("failed to parse CRIU version")]
+    VersionParse,
 }
 
 pub struct Criu {
@@ -77,11 +108,11 @@ pub struct Criu {
 }
 
 impl Criu {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new() -> Result<Self, CriuError> {
         Criu::new_with_criu_path(String::from("criu"))
     }
 
-    pub fn new_with_criu_path(path_to_criu: String) -> Result<Self, Box<dyn Error>> {
+    pub fn new_with_criu_path(path_to_criu: String) -> Result<Self, CriuError> {
         Ok(Self {
             criu_path: path_to_criu,
             sv: [-1, -1],
@@ -115,12 +146,12 @@ impl Criu {
         })
     }
 
-    pub fn get_criu_version(&mut self) -> Result<u32, Box<dyn Error>> {
+    pub fn get_criu_version(&mut self) -> Result<u32, CriuError> {
         let response = self.do_swrk_with_response(rpc::Criu_req_type::VERSION, None)?;
 
         let mut version: u32 = (response.version.major_number() * 10000)
             .try_into()
-            .context("parsing criu version failed")?;
+            .map_err(|_| CriuError::VersionParse)?;
         version += (response.version.minor_number() * 100) as u32;
         version += response.version.sublevel() as u32;
 
@@ -137,7 +168,7 @@ impl Criu {
         &mut self,
         request_type: rpc::Criu_req_type,
         criu_opts: Option<rpc::Criu_opts>,
-    ) -> Result<rpc::Criu_resp, Box<dyn Error>> {
+    ) -> Result<rpc::Criu_resp, CriuError> {
         if unsafe {
             libc::socketpair(
                 libc::AF_LOCAL,
@@ -146,7 +177,7 @@ impl Criu {
                 self.sv.as_mut_ptr(),
             ) != 0
         } {
-            return Err("libc::socketpair failed".into());
+            return Err(CriuError::SocketPair(std::io::Error::last_os_error()));
         }
 
         let mut cmd = Command::new(self.criu_path.clone());
@@ -156,11 +187,9 @@ impl Criu {
             .stderr(Stdio::inherit());
 
         // Caller passes fds opened without CLOEXEC; the child (criu swrk) inherits them. We use those fd numbers in the RPC (crun-style).
-        let mut criu = cmd.spawn().with_context(|| {
-            format!(
-                "executing criu binary for swrk using path {:?} failed",
-                self.criu_path
-            )
+        let mut criu = cmd.spawn().map_err(|e| CriuError::Spawn {
+            path: self.criu_path.clone(),
+            source: e,
         })?;
 
         // Close sv[1] in the parent now that criu swrk has inherited it.
@@ -177,12 +206,9 @@ impl Criu {
 
         let fd = self.sv[0];
 
-        let req_bytes = req
-            .write_to_bytes()
-            .context("writing protobuf request to byte vec failed")?;
+        let req_bytes = req.write_to_bytes()?;
 
-        self.send_request(fd, &req_bytes)
-            .with_context(|| "sending protobuf request failed".to_string())?;
+        self.send_request(fd, &req_bytes)?;
 
         let mut f = unsafe { File::from_raw_fd(fd) };
         self.sv[0] = -1;
@@ -218,7 +244,7 @@ impl Criu {
     /// Receive CRIU response, returning the raw bytes and an optional SCM_RIGHTS fd.
     /// Mirrors libcriu's recv_resp: MSG_PEEK to size the buffer, MSG_TRUNC on recvmsg,
     /// EINVAL if cmsg_type != SCM_RIGHTS, ENFILE if MSG_CTRUNC.
-    fn recv_criu_response(fd: RawFd) -> Result<(Vec<u8>, Option<RawFd>), Box<dyn Error>> {
+    fn recv_criu_response(fd: RawFd) -> Result<(Vec<u8>, Option<RawFd>), CriuError> {
         // Probe the datagram length without consuming it.
         // MSG_PEEK: leaves the message in the queue for the actual read below.
         // MSG_TRUNC: makes the kernel return the true on-wire length even with a 0-byte buffer.
@@ -230,8 +256,7 @@ impl Criu {
                 libc::MSG_TRUNC | libc::MSG_PEEK,
             );
             if ret == -1 {
-                let e = std::io::Error::last_os_error();
-                return Err(format!("can't read response: {}", e).into());
+                return Err(CriuError::Io(std::io::Error::last_os_error()));
             }
             ret as usize
         };
@@ -256,11 +281,13 @@ impl Criu {
         let n = unsafe {
             let ret = libc::recvmsg(fd, &mut msg, libc::MSG_TRUNC);
             if ret == -1 {
-                let e = std::io::Error::last_os_error();
-                return Err(format!("can't read response: {}", e).into());
+                return Err(CriuError::Io(std::io::Error::last_os_error()));
             }
             if ret == 0 {
-                return Err("unexpected EOF from CRIU".into());
+                return Err(CriuError::Io(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "unexpected EOF from CRIU",
+                )));
             }
             ret as usize
         };
@@ -273,11 +300,15 @@ impl Criu {
         if !cmsg.is_null() {
             // We probably got an FD from CRIU.
             if unsafe { (*cmsg).cmsg_type } != libc::SCM_RIGHTS {
-                return Err(std::io::Error::from_raw_os_error(libc::EINVAL).into());
+                return Err(CriuError::Io(std::io::Error::from_raw_os_error(
+                    libc::EINVAL,
+                )));
             }
             // MSG_CTRUNC is set if msg_controllen was too small to hold all ancillary data.
             if msg.msg_flags & libc::MSG_CTRUNC != 0 {
-                return Err(std::io::Error::from_raw_os_error(libc::ENFILE).into());
+                return Err(CriuError::Io(std::io::Error::from_raw_os_error(
+                    libc::ENFILE,
+                )));
             }
             // read_unaligned handles the case where CMSG_DATA's *u8 pointer does not
             // satisfy RawFd's alignment requirement, avoiding type-punning UB.
@@ -294,26 +325,22 @@ impl Criu {
         f: &mut File,
         criu: &mut Child,
         request_type: rpc::Criu_req_type,
-    ) -> Result<rpc::Criu_resp, Box<dyn Error>> {
+    ) -> Result<rpc::Criu_resp, CriuError> {
         let fd = f.as_raw_fd();
 
         loop {
             let (data, scm_fd) = Self::recv_criu_response(fd)?;
 
-            let response: rpc::Criu_resp =
-                Message::parse_from_bytes(&data).context("parsing criu response failed")?;
+            let response: rpc::Criu_resp = Message::parse_from_bytes(&data)?;
 
             let resp_type = response.type_();
 
             if !response.success() {
-                criu.kill()
-                    .context("killing criu process (due to failed request) failed")?;
-                return Err(format!(
-                    "criu failed: type {:?} errno {}",
-                    resp_type,
-                    response.cr_errno()
-                )
-                .into());
+                let _ = criu.kill();
+                return Err(CriuError::RpcFailed {
+                    resp_type: format!("{:?}", resp_type),
+                    cr_errno: response.cr_errno(),
+                });
             }
 
             match resp_type {
@@ -343,17 +370,12 @@ impl Criu {
                     notify_req.set_type(rpc::Criu_req_type::NOTIFY);
                     notify_req.set_notify_success(notify_ret == 0);
 
-                    f.write_all(
-                        &notify_req
-                            .write_to_bytes()
-                            .context("writing notify ack to byte vec failed")?,
-                    )
-                    .context("writing notify ack response failed")?;
+                    f.write_all(&notify_req.write_to_bytes()?)?;
 
                     // Like libcriu's send_notify_ack: if the callback failed, return
                     // the error immediately without waiting for CRIU's next response.
                     if notify_ret != 0 {
-                        return Err(format!("notify callback failed with {}", notify_ret).into());
+                        return Err(CriuError::NotifyFailed(notify_ret));
                     }
                     continue; // goto again
                 }
@@ -364,16 +386,13 @@ impl Criu {
                 | rpc::Criu_req_type::VERSION => {
                     // Expected response types - break the loop
                     if resp_type != request_type {
-                        criu.kill()
-                            .context("killing criu process (due to incorrect response) failed")?;
-                        return Err(
-                            format!("Unexpected CRIU RPC response ({:?})", resp_type).into()
-                        );
+                        let _ = criu.kill();
+                        return Err(CriuError::UnexpectedResponse(format!("{:?}", resp_type)));
                     }
                     return Ok(response);
                 }
                 _ => {
-                    return Err(format!("unable to parse the response {:?}", resp_type).into());
+                    return Err(CriuError::UnexpectedResponse(format!("{:?}", resp_type)));
                 }
             }
         }
@@ -407,9 +426,12 @@ impl Criu {
     /// Add an inherited file descriptor for CRIU restore. Inheriting is only supported with swrk (binary) mode.
     /// The fd must be opened **without CLOEXEC** (e.g. `O_RDONLY` like crun; or clear with `fcntl(fd, F_SETFD, 0)`)
     /// so the child (criu swrk) inherits it; we use that fd number in the RPC.
-    pub fn add_inherit_fd(&mut self, fd: RawFd, key: String) -> Result<(), Box<dyn Error>> {
+    pub fn add_inherit_fd(&mut self, fd: RawFd, key: String) -> Result<(), CriuError> {
         if fd < 0 {
-            return Err(format!("invalid fd {}: must be >= 0", fd).into());
+            return Err(CriuError::InvalidArgument(format!(
+                "invalid fd {}: must be >= 0",
+                fd
+            )));
         }
         self.inherit_fds.push((fd, key));
         Ok(())
@@ -666,7 +688,7 @@ impl Criu {
 
     /// Dump (checkpoint) a process.
     /// Uses the callback set by set_notify_cb if any.
-    pub fn dump(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn dump(&mut self) -> Result<(), CriuError> {
         let mut criu_opts = rpc::Criu_opts::default();
         self.fill_criu_opts(&mut criu_opts);
         self.do_swrk_with_response(rpc::Criu_req_type::DUMP, Some(criu_opts))?;
@@ -676,7 +698,7 @@ impl Criu {
 
     /// Restore a process.
     /// Uses the callback set by set_notify_cb if any.
-    pub fn restore(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn restore(&mut self) -> Result<(), CriuError> {
         let mut criu_opts = rpc::Criu_opts::default();
         self.fill_criu_opts(&mut criu_opts);
         self.do_swrk_with_response(rpc::Criu_req_type::RESTORE, Some(criu_opts))?;
