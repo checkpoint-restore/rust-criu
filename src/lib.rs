@@ -108,6 +108,7 @@ pub struct Criu {
     status_fd: Option<i32>,
     lazy_pages: Option<bool>,
     page_server: Option<(String, i32)>,
+    empty_net_ns: Option<bool>,
 }
 
 impl Criu {
@@ -149,6 +150,7 @@ impl Criu {
             status_fd: None,
             lazy_pages: None,
             page_server: None,
+            empty_net_ns: None,
         })
     }
 
@@ -540,6 +542,13 @@ impl Criu {
         self.page_server = Some((address, port));
     }
 
+    /// Restore the network namespace as empty and let an action script repopulate it.
+    /// CRIU currently only accepts the network namespace for `empty_ns`
+    /// (see criu/cr-service.c: empty_ns rejects bits other than CLONE_NEWNET).
+    pub fn set_empty_net_ns(&mut self, empty_net_ns: bool) {
+        self.empty_net_ns = Some(empty_net_ns);
+    }
+
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
         if let Some(pid) = self.pid {
             criu_opts.set_pid(pid);
@@ -681,6 +690,10 @@ impl Criu {
             ps.set_port(port);
             criu_opts.ps = MessageField::some(ps);
         }
+
+        if let Some(true) = self.empty_net_ns {
+            criu_opts.set_empty_ns(libc::CLONE_NEWNET as u32);
+        }
     }
 
     fn clear(&mut self) {
@@ -713,6 +726,7 @@ impl Criu {
         self.status_fd = None;
         self.lazy_pages = None;
         self.page_server = None;
+        self.empty_net_ns = None;
     }
 
     /// Dump (checkpoint) a process.
@@ -943,5 +957,34 @@ mod tests {
         let mut opts = rpc::Criu_opts::default();
         criu.fill_criu_opts(&mut opts);
         assert!(opts.ps.is_none());
+    }
+
+    #[test]
+    fn set_empty_net_ns_true_fills_criu_opts() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_empty_net_ns(true);
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert_eq!(opts.empty_ns(), libc::CLONE_NEWNET as u32);
+    }
+
+    #[test]
+    fn set_empty_net_ns_false_does_not_fill_criu_opts() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_empty_net_ns(false);
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(!opts.has_empty_ns());
+    }
+
+    #[test]
+    fn empty_net_ns_default_not_set() {
+        let mut criu = Criu::new().unwrap();
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(!opts.has_empty_ns());
     }
 }
