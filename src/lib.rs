@@ -106,6 +106,7 @@ pub struct Criu {
     auto_dedup: Option<bool>,
     parent_img: Option<String>,
     status_fd: Option<i32>,
+    empty_ns: Option<u32>,
 }
 
 impl Criu {
@@ -145,6 +146,7 @@ impl Criu {
             auto_dedup: None,
             parent_img: None,
             status_fd: None,
+            empty_ns: None,
         })
     }
 
@@ -535,6 +537,12 @@ impl Criu {
         self.status_fd = Some(status_fd);
     }
 
+    /// Set namespaces that should be restored as empty (bitmask of `CLONE_NEW*` flags).
+    /// See CRIU's `--empty-ns` option.
+    pub fn set_empty_ns(&mut self, empty_ns: u32) {
+        self.empty_ns = Some(empty_ns);
+    }
+
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
         if self.pid != -1 {
             criu_opts.set_pid(self.pid);
@@ -665,6 +673,10 @@ impl Criu {
         if let Some(status_fd) = self.status_fd {
             criu_opts.set_status_fd(status_fd);
         }
+
+        if let Some(empty_ns) = self.empty_ns {
+            criu_opts.set_empty_ns(empty_ns);
+        }
     }
 
     fn clear(&mut self) {
@@ -695,6 +707,7 @@ impl Criu {
         self.auto_dedup = None;
         self.parent_img = None;
         self.status_fd = None;
+        self.empty_ns = None;
     }
 
     /// Dump (checkpoint) a process.
@@ -888,5 +901,24 @@ mod tests {
         let mut opts = rpc::Criu_opts::default();
         criu.fill_criu_opts(&mut opts);
         assert!(!opts.has_status_fd());
+    }
+
+    #[test]
+    fn set_empty_ns_fills_criu_opts() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_empty_ns(libc::CLONE_NEWNET as u32);
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert_eq!(opts.empty_ns(), libc::CLONE_NEWNET as u32);
+    }
+
+    #[test]
+    fn empty_ns_default_not_set() {
+        let mut criu = Criu::new().unwrap();
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(!opts.has_empty_ns());
     }
 }
