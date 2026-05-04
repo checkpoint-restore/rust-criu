@@ -37,6 +37,18 @@ impl CgMode {
     }
 }
 
+bitflags::bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct Namespace: u32 {
+        const NET  = libc::CLONE_NEWNET  as u32;
+        const USER = libc::CLONE_NEWUSER as u32;
+        const PID  = libc::CLONE_NEWPID  as u32;
+        const UTS  = libc::CLONE_NEWUTS  as u32;
+        const IPC  = libc::CLONE_NEWIPC  as u32;
+        const MNT  = libc::CLONE_NEWNS   as u32;
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CriuError {
     #[error("socketpair failed: {0}")]
@@ -106,7 +118,7 @@ pub struct Criu {
     auto_dedup: Option<bool>,
     parent_img: Option<String>,
     status_fd: Option<i32>,
-    empty_ns: Option<u32>,
+    empty_ns: Option<Namespace>,
 }
 
 impl Criu {
@@ -537,9 +549,7 @@ impl Criu {
         self.status_fd = Some(status_fd);
     }
 
-    /// Set namespaces that should be restored as empty (bitmask of `CLONE_NEW*` flags).
-    /// See CRIU's `--empty-ns` option.
-    pub fn set_empty_ns(&mut self, empty_ns: u32) {
+    pub fn set_empty_ns(&mut self, empty_ns: Namespace) {
         self.empty_ns = Some(empty_ns);
     }
 
@@ -675,7 +685,7 @@ impl Criu {
         }
 
         if let Some(empty_ns) = self.empty_ns {
-            criu_opts.set_empty_ns(empty_ns);
+            criu_opts.set_empty_ns(empty_ns.bits());
         }
     }
 
@@ -906,11 +916,21 @@ mod tests {
     #[test]
     fn set_empty_ns_fills_criu_opts() {
         let mut criu = Criu::new().unwrap();
-        criu.set_empty_ns(libc::CLONE_NEWNET as u32);
+        criu.set_empty_ns(Namespace::NET);
 
         let mut opts = rpc::Criu_opts::default();
         criu.fill_criu_opts(&mut opts);
-        assert_eq!(opts.empty_ns(), libc::CLONE_NEWNET as u32);
+        assert_eq!(opts.empty_ns(), Namespace::NET.bits());
+    }
+
+    #[test]
+    fn set_empty_ns_accepts_multiple_flags() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_empty_ns(Namespace::NET | Namespace::IPC);
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert_eq!(opts.empty_ns(), (Namespace::NET | Namespace::IPC).bits());
     }
 
     #[test]
