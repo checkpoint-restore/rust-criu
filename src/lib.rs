@@ -1,6 +1,6 @@
 pub mod rust_criu_protobuf;
 
-use protobuf::Message;
+use protobuf::{Message, MessageField};
 use rust_criu_protobuf::rpc;
 use rust_criu_protobuf::rpc::Criu_notify;
 use std::fs::File;
@@ -106,6 +106,8 @@ pub struct Criu {
     auto_dedup: Option<bool>,
     parent_img: Option<String>,
     status_fd: Option<i32>,
+    lazy_pages: Option<bool>,
+    page_server: Option<(String, i32)>,
 }
 
 impl Criu {
@@ -145,6 +147,8 @@ impl Criu {
             auto_dedup: None,
             parent_img: None,
             status_fd: None,
+            lazy_pages: None,
+            page_server: None,
         })
     }
 
@@ -203,7 +207,7 @@ impl Criu {
         req.set_type(request_type);
 
         if let Some(co) = criu_opts {
-            req.opts = protobuf::MessageField::some(co);
+            req.opts = MessageField::some(co);
         }
 
         let fd = self.sv[0];
@@ -535,6 +539,14 @@ impl Criu {
         self.status_fd = Some(status_fd);
     }
 
+    pub fn set_lazy_pages(&mut self, lazy_pages: bool) {
+        self.lazy_pages = Some(lazy_pages);
+    }
+
+    pub fn set_page_server(&mut self, address: String, port: i32) {
+        self.page_server = Some((address, port));
+    }
+
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
         if self.pid != -1 {
             criu_opts.set_pid(self.pid);
@@ -665,6 +677,17 @@ impl Criu {
         if let Some(status_fd) = self.status_fd {
             criu_opts.set_status_fd(status_fd);
         }
+
+        if let Some(lazy_pages) = self.lazy_pages {
+            criu_opts.set_lazy_pages(lazy_pages);
+        }
+
+        if let Some((ref address, port)) = self.page_server {
+            let mut ps = rpc::Criu_page_server_info::new();
+            ps.set_address(address.clone());
+            ps.set_port(port);
+            criu_opts.ps = MessageField::some(ps);
+        }
     }
 
     fn clear(&mut self) {
@@ -695,6 +718,8 @@ impl Criu {
         self.auto_dedup = None;
         self.parent_img = None;
         self.status_fd = None;
+        self.lazy_pages = None;
+        self.page_server = None;
     }
 
     /// Dump (checkpoint) a process.
@@ -888,5 +913,45 @@ mod tests {
         let mut opts = rpc::Criu_opts::default();
         criu.fill_criu_opts(&mut opts);
         assert!(!opts.has_status_fd());
+    }
+
+    #[test]
+    fn set_lazy_pages_fills_criu_opts() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_lazy_pages(true);
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(opts.lazy_pages());
+    }
+
+    #[test]
+    fn lazy_pages_default_not_set() {
+        let mut criu = Criu::new().unwrap();
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(!opts.has_lazy_pages());
+    }
+
+    #[test]
+    fn set_page_server_fills_criu_opts() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_page_server(String::from("127.0.0.1"), 1234);
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(opts.ps.is_some());
+        assert_eq!(opts.ps.address(), "127.0.0.1");
+        assert_eq!(opts.ps.port(), 1234);
+    }
+
+    #[test]
+    fn page_server_default_not_set() {
+        let mut criu = Criu::new().unwrap();
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(opts.ps.is_none());
     }
 }
