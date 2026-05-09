@@ -1,6 +1,6 @@
 pub mod rust_criu_protobuf;
 
-use protobuf::Message;
+use protobuf::{Message, MessageField};
 use rust_criu_protobuf::rpc;
 use rust_criu_protobuf::rpc::Criu_notify;
 use std::fs::File;
@@ -207,7 +207,7 @@ impl Criu {
         req.set_type(request_type);
 
         if let Some(co) = criu_opts {
-            req.opts = protobuf::MessageField::some(co);
+            req.opts = MessageField::some(co);
         }
 
         let fd = self.sv[0];
@@ -686,7 +686,7 @@ impl Criu {
             let mut ps = rpc::Criu_page_server_info::new();
             ps.set_address(address.clone());
             ps.set_port(port);
-            criu_opts.ps = protobuf::MessageField::some(ps);
+            criu_opts.ps = MessageField::some(ps);
         }
     }
 

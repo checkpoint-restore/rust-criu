@@ -11,10 +11,13 @@ license-file = "LICENSE"
 libc = "0.2"
 thiserror = "1"
 protobuf = "= 3.7.2"
-nix = "0.31.2"
+nix = { version = "0.31", features = ["fs", "signal", "process"] }
 
 [build-dependencies]
 protobuf-codegen = "= 3.7.2"
+
+[dev-dependencies]
+nix = { version = "0.31", features = ["fs", "signal", "process"] }
 
 [lib]
 name = "rust_criu"
