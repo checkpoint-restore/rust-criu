@@ -73,9 +73,9 @@ pub enum CriuError {
 pub struct Criu {
     criu_path: String,
     sv: [i32; 2],
-    pid: i32,
-    images_dir_fd: i32,
-    log_level: i32,
+    pid: Option<i32>,
+    images_dir_fd: Option<i32>,
+    log_level: Option<i32>,
     log_file: Option<String>,
     external_mounts: Vec<(String, String)>,
     /// Generic --external strings, e.g. "net[<inode>]:<path>" for external network namespace.
@@ -85,8 +85,8 @@ pub struct Criu {
     inherit_fds: Vec<(RawFd, String)>,
     orphan_pts_master: Option<bool>,
     /// PTY master fd received via SCM_RIGHTS on "orphan-pts-master" notify.
-    /// Retrieve with take_orphan_pts_master_fd() after restore(). -1 if not received.
-    orphan_pts_master_fd: i32,
+    /// Retrieve with take_orphan_pts_master_fd() after restore().
+    orphan_pts_master_fd: Option<RawFd>,
     root: Option<String>,
     leave_running: Option<bool>,
     ext_unix_sk: Option<bool>,
@@ -95,7 +95,7 @@ pub struct Criu {
     tcp_established: Option<bool>,
     file_locks: Option<bool>,
     manage_cgroups: Option<bool>,
-    work_dir_fd: i32,
+    work_dir_fd: Option<i32>,
     freeze_cgroup: Option<String>,
     cgroups_mode: Option<CgMode>,
     cgroup_props: Option<String>,
@@ -117,15 +117,15 @@ impl Criu {
         Ok(Self {
             criu_path: path_to_criu,
             sv: [-1, -1],
-            pid: -1,
-            images_dir_fd: -1,
-            log_level: -1,
+            pid: None,
+            images_dir_fd: None,
+            log_level: None,
             log_file: None,
             external_mounts: Vec::new(),
             externals: Vec::new(),
             inherit_fds: Vec::new(),
             orphan_pts_master: None,
-            orphan_pts_master_fd: -1,
+            orphan_pts_master_fd: None,
             root: None,
             leave_running: None,
             ext_unix_sk: None,
@@ -134,7 +134,7 @@ impl Criu {
             tcp_established: None,
             file_locks: None,
             manage_cgroups: None,
-            work_dir_fd: -1,
+            work_dir_fd: None,
             freeze_cgroup: None,
             cgroups_mode: None,
             cgroup_props: None,
@@ -355,9 +355,7 @@ impl Criu {
                     // "orphan-pts-master"; that is the only notify CRIU uses to
                     // deliver the PTY master fd via SCM_RIGHTS.
                     if script == "orphan-pts-master" {
-                        if let Some(received_fd) = scm_fd {
-                            self.orphan_pts_master_fd = received_fd;
-                        }
+                        self.orphan_pts_master_fd = scm_fd;
                     }
 
                     let notify_ret = if let Some(cb) = self.notify_cb {
@@ -401,15 +399,15 @@ impl Criu {
     }
 
     pub fn set_pid(&mut self, pid: i32) {
-        self.pid = pid;
+        self.pid = Some(pid);
     }
 
     pub fn set_images_dir_fd(&mut self, fd: i32) {
-        self.images_dir_fd = fd;
+        self.images_dir_fd = Some(fd);
     }
 
     pub fn set_log_level(&mut self, log_level: i32) {
-        self.log_level = log_level;
+        self.log_level = Some(log_level);
     }
 
     pub fn set_log_file(&mut self, log_file: String) {
@@ -449,13 +447,7 @@ impl Criu {
     /// Returns the PTY master fd received during the last restore, consuming it.
     /// Returns None if not received. Caller is responsible for closing the fd.
     pub fn take_orphan_pts_master_fd(&mut self) -> Option<RawFd> {
-        if self.orphan_pts_master_fd >= 0 {
-            let fd = self.orphan_pts_master_fd;
-            self.orphan_pts_master_fd = -1;
-            Some(fd)
-        } else {
-            None
-        }
+        self.orphan_pts_master_fd.take()
     }
 
     pub fn set_root(&mut self, root: String) {
@@ -491,7 +483,7 @@ impl Criu {
     }
 
     pub fn set_work_dir_fd(&mut self, fd: i32) {
-        self.work_dir_fd = fd;
+        self.work_dir_fd = Some(fd);
     }
 
     pub fn set_freeze_cgroup(&mut self, freeze_cgroup: String) {
@@ -536,16 +528,16 @@ impl Criu {
     }
 
     fn fill_criu_opts(&mut self, criu_opts: &mut rpc::Criu_opts) {
-        if self.pid != -1 {
-            criu_opts.set_pid(self.pid);
+        if let Some(pid) = self.pid {
+            criu_opts.set_pid(pid);
         }
 
-        if self.images_dir_fd != -1 {
-            criu_opts.set_images_dir_fd(self.images_dir_fd);
+        if let Some(images_dir_fd) = self.images_dir_fd {
+            criu_opts.set_images_dir_fd(images_dir_fd);
         }
 
-        if self.log_level != -1 {
-            criu_opts.set_log_level(self.log_level);
+        if let Some(log_level) = self.log_level {
+            criu_opts.set_log_level(log_level);
         }
 
         if let Some(ref log_file) = self.log_file {
@@ -617,8 +609,8 @@ impl Criu {
             criu_opts.set_manage_cgroups(manage_cgroups);
         }
 
-        if self.work_dir_fd != -1 {
-            criu_opts.set_work_dir_fd(self.work_dir_fd);
+        if let Some(work_dir_fd) = self.work_dir_fd {
+            criu_opts.set_work_dir_fd(work_dir_fd);
         }
 
         if let Some(ref freeze_cgroup) = self.freeze_cgroup {
@@ -668,9 +660,9 @@ impl Criu {
     }
 
     fn clear(&mut self) {
-        self.pid = -1;
-        self.images_dir_fd = -1;
-        self.log_level = -1;
+        self.pid = None;
+        self.images_dir_fd = None;
+        self.log_level = None;
         self.log_file = None;
         self.external_mounts = Vec::new();
         self.externals = Vec::new();
@@ -684,7 +676,7 @@ impl Criu {
         self.tcp_established = None;
         self.file_locks = None;
         self.manage_cgroups = None;
-        self.work_dir_fd = -1;
+        self.work_dir_fd = None;
         self.freeze_cgroup = None;
         self.cgroups_mode = None;
         self.cgroup_props = None;
@@ -738,8 +730,8 @@ impl Drop for Criu {
         if self.sv[1] >= 0 {
             unsafe { libc::close(self.sv[1]) };
         }
-        if self.orphan_pts_master_fd >= 0 {
-            unsafe { libc::close(self.orphan_pts_master_fd) };
+        if let Some(fd) = self.orphan_pts_master_fd {
+            unsafe { libc::close(fd) };
         }
     }
 }
