@@ -5,7 +5,7 @@ use rust_criu_protobuf::rpc;
 use rust_criu_protobuf::rpc::Criu_notify;
 use std::fs::File;
 use std::io::Write;
-use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
+use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::process::{Child, Command, Stdio};
 
 /// CRIU notification callback type (libcriu style).
@@ -74,7 +74,7 @@ pub struct Criu {
     criu_path: String,
     sv: [i32; 2],
     pid: Option<i32>,
-    images_dir_fd: Option<i32>,
+    images_dir_fd: Option<RawFd>,
     log_level: Option<i32>,
     log_file: Option<String>,
     external_mounts: Vec<(String, String)>,
@@ -86,7 +86,7 @@ pub struct Criu {
     orphan_pts_master: Option<bool>,
     /// PTY master fd received via SCM_RIGHTS on "orphan-pts-master" notify.
     /// Retrieve with take_orphan_pts_master_fd() after restore().
-    orphan_pts_master_fd: Option<RawFd>,
+    orphan_pts_master_fd: Option<OwnedFd>,
     root: Option<String>,
     leave_running: Option<bool>,
     ext_unix_sk: Option<bool>,
@@ -95,7 +95,7 @@ pub struct Criu {
     tcp_established: Option<bool>,
     file_locks: Option<bool>,
     manage_cgroups: Option<bool>,
-    work_dir_fd: Option<i32>,
+    work_dir_fd: Option<RawFd>,
     freeze_cgroup: Option<String>,
     cgroups_mode: Option<CgMode>,
     cgroup_props: Option<String>,
@@ -355,7 +355,8 @@ impl Criu {
                     // "orphan-pts-master"; that is the only notify CRIU uses to
                     // deliver the PTY master fd via SCM_RIGHTS.
                     if script == "orphan-pts-master" {
-                        self.orphan_pts_master_fd = scm_fd;
+                        self.orphan_pts_master_fd =
+                            scm_fd.map(|fd| unsafe { OwnedFd::from_raw_fd(fd) });
                     }
 
                     let notify_ret = if let Some(cb) = self.notify_cb {
@@ -402,7 +403,7 @@ impl Criu {
         self.pid = Some(pid);
     }
 
-    pub fn set_images_dir_fd(&mut self, fd: i32) {
+    pub fn set_images_dir_fd(&mut self, fd: RawFd) {
         self.images_dir_fd = Some(fd);
     }
 
@@ -445,8 +446,8 @@ impl Criu {
     }
 
     /// Returns the PTY master fd received during the last restore, consuming it.
-    /// Returns None if not received. Caller is responsible for closing the fd.
-    pub fn take_orphan_pts_master_fd(&mut self) -> Option<RawFd> {
+    /// Returns None if not received. The fd is closed when the returned OwnedFd is dropped.
+    pub fn take_orphan_pts_master_fd(&mut self) -> Option<OwnedFd> {
         self.orphan_pts_master_fd.take()
     }
 
@@ -482,7 +483,7 @@ impl Criu {
         self.manage_cgroups = Some(manage_cgroups);
     }
 
-    pub fn set_work_dir_fd(&mut self, fd: i32) {
+    pub fn set_work_dir_fd(&mut self, fd: RawFd) {
         self.work_dir_fd = Some(fd);
     }
 
@@ -729,9 +730,6 @@ impl Drop for Criu {
         }
         if self.sv[1] >= 0 {
             unsafe { libc::close(self.sv[1]) };
-        }
-        if let Some(fd) = self.orphan_pts_master_fd {
-            unsafe { libc::close(fd) };
         }
     }
 }
