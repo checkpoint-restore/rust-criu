@@ -151,10 +151,9 @@ pub fn orphan_pts_master_test(criu_bin_path: &str) {
         .take_orphan_pts_master_fd()
         .expect("orphan-pts-master fd not received after restore");
     assert!(
-        unsafe { libc::isatty(master_fd) } != 0,
+        unsafe { libc::isatty(master_fd.as_raw_fd()) } != 0,
         "received fd is not a TTY (master)"
     );
-    unsafe { libc::close(master_fd) };
 
     // Kill the restored process to avoid leaving orphan processes.
     unsafe {
