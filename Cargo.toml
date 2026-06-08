@@ -11,7 +11,7 @@ license-file = "LICENSE"
 libc = "0.2"
 thiserror = "2"
 protobuf = "= 3.7.2"
-nix = { version = "0.31", features = ["fs", "signal", "process"] }
+nix = { version = "0.31", features = ["fs", "sched", "signal", "process", "user"] }
 
 [build-dependencies]
 protobuf-codegen = "= 3.7.2"
