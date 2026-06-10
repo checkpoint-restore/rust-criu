@@ -6,7 +6,6 @@ const EXTERNAL_NETNS_NAME: &str = "rust_criu_netns_test";
 /// RAII guard that always deletes the test netns on drop.
 /// Ensures cleanup on both success and panic paths.
 struct NetnsGuard;
-
 impl Drop for NetnsGuard {
     fn drop(&mut self) {
         let _ = std::process::Command::new("ip")
@@ -18,7 +17,7 @@ impl Drop for NetnsGuard {
 /// External network namespace test: dump a process in a netns, restore into that same netns
 /// using --external net[inode]:path so CRIU restores into the existing namespace.
 /// Skipped unless root and `ip netns` is available.
-pub fn external_netns_test(criu_bin_path: &str) {
+fn external_netns_test(criu_bin_path: &str) {
     if unsafe { libc::geteuid() } != 0 {
         println!("external_netns_test: skip (not root)");
         return;
@@ -81,10 +80,10 @@ pub fn external_netns_test(criu_bin_path: &str) {
         reader.read_line(&mut line).unwrap();
         line.trim().parse().unwrap_or(0)
     };
-
     if pid == 0 {
         panic!("failed to get PID from loop process");
     }
+
     let mut stat: libc::stat = unsafe { std::mem::zeroed() };
     if unsafe { libc::fstat(ns_file.as_raw_fd(), &mut stat) } != 0 {
         let _ = child.wait();
@@ -158,4 +157,11 @@ pub fn external_netns_test(criu_bin_path: &str) {
     if let Err(e) = std::fs::remove_dir_all(img_dir) {
         panic!("remove_dir_all {} failed: {:#?}", img_dir, e);
     }
+}
+
+#[test]
+fn external_netns() {
+    let criu_bin_path =
+        std::env::var("CRIU_BINARY").expect("CRIU_BINARY must be set to run integration tests");
+    external_netns_test(&criu_bin_path);
 }

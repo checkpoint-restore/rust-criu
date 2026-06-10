@@ -17,9 +17,9 @@ GENERATE_PROTOBUF=1 cargo build
 
 ## Run tests
 
-To run the included tests please use the following command to build `rust-criu`:
+To run the included tests please use the following commands:
 
 ```shell
 GENERATE_TEST_PROCESS=1 cargo build
-sudo target/debug/rust-criu-test /path/to/criu/binary
+sudo -E env PATH=$PATH CRIU_BINARY=/path/to/criu/binary cargo test -- --test-threads=1
 ```

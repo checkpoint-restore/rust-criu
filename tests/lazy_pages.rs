@@ -9,7 +9,7 @@ use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
-const IMAGES_DIR: &str = "test/images";
+const IMAGES_DIR: &str = "test/lazy_pages_images";
 const READY_TIMEOUT: Duration = Duration::from_secs(5);
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -25,7 +25,7 @@ fn create_state_pipe() -> std::io::Result<(OwnedFd, OwnedFd)> {
 }
 
 // Create a checkpoint with lazy-pages enabled, then restore it.
-pub fn lazy_pages_test(criu_bin_path: &str) {
+fn lazy_pages_test(criu_bin_path: &str) {
     println!("Running lazy_pages_test");
 
     let pid: i32 = match Command::new("test/piggie").output() {
@@ -227,4 +227,11 @@ fn wait_for_ready(fd: BorrowedFd<'_>, timeout: Duration) -> bool {
         }
         std::thread::sleep(POLL_INTERVAL);
     }
+}
+
+#[test]
+fn lazy_pages() {
+    let criu_bin_path =
+        std::env::var("CRIU_BINARY").expect("CRIU_BINARY must be set to run integration tests");
+    lazy_pages_test(&criu_bin_path);
 }

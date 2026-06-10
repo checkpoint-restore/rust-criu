@@ -19,7 +19,7 @@ fn netns_contains_iface(pid: i32, iface: &str) -> std::io::Result<bool> {
 /// Verifies empty_net_ns option: network interfaces created before dump
 /// are absent after restore, confirming CRIU skips restoring network
 /// interfaces when --empty-ns net is specified.
-pub fn empty_net_ns_test(criu_bin_path: &str) {
+fn empty_net_ns_test(criu_bin_path: &str) {
     if !geteuid().is_root() {
         println!("empty_net_ns_test: skip (not root)");
         return;
@@ -181,4 +181,11 @@ pub fn empty_net_ns_test(criu_bin_path: &str) {
     if let Err(e) = std::fs::remove_dir_all(img_dir) {
         panic!("remove_dir_all {} failed: {:#?}", img_dir, e);
     }
+}
+
+#[test]
+fn empty_net_ns() {
+    let criu_bin_path =
+        std::env::var("CRIU_BINARY").expect("CRIU_BINARY must be set to run integration tests");
+    empty_net_ns_test(&criu_bin_path);
 }
