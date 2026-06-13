@@ -38,8 +38,8 @@ shfmt:
 	shfmt -w test/prepare-fedora-coverage-environment.sh
 
 # Integration test - requires root and CRIU
-integration-test: build
-	sudo target/debug/rust-criu-test $(CRIU_PATH)
+integration-test:
+	sudo -E env PATH=$(PATH) CRIU_BINARY=$(CRIU_PATH) $(CARGO) test -- --test-threads=1
 
 clean:
 	rm -rf target
@@ -62,32 +62,14 @@ coverage:
 	mkdir -p $(COVERAGE_PATH)
 	# Clean any previous coverage data
 	$(LLVM_COV) clean --workspace
-	# Build instrumented test binary (includes piggie test process)
-	CARGO_INCREMENTAL=0 \
-	RUSTFLAGS="-C instrument-coverage" \
-	LLVM_PROFILE_FILE="$(COVERAGE_PATH)/rust-criu-%p-%m.profraw" \
-	GENERATE_TEST_PROCESS=1 \
-		$(CARGO) build
-	# Run integration tests with instrumented binary (requires sudo)
-	sudo LLVM_PROFILE_FILE="$(COVERAGE_PATH)/rust-criu-%p-%m.profraw" \
-		target/debug/rust-criu-test $(CRIU_PATH)
-	# Merge profraw files
-	llvm-profdata merge -sparse $(COVERAGE_PATH)/rust-criu-*.profraw \
-		-o $(COVERAGE_PATH)/rust-criu.profdata
-	# Generate coverage report
-	@echo ""
-	@echo "=== Coverage Summary ==="
-	llvm-cov report \
-		--instr-profile=$(COVERAGE_PATH)/rust-criu.profdata \
-		--object target/debug/rust-criu-test \
-		--ignore-filename-regex='\.cargo|rustc|rust_criu_protobuf/rpc\.rs'
-	# Generate LCOV format
-	llvm-cov export \
-		--format=lcov \
-		--instr-profile=$(COVERAGE_PATH)/rust-criu.profdata \
-		--object target/debug/rust-criu-test \
+	# Build test processes (piggie, loop, loop_pts)
+	GENERATE_TEST_PROCESS=1 $(CARGO) build
+	# Run integration tests with coverage (requires root for CRIU)
+	sudo -E env PATH=$(PATH) CRIU_BINARY=$(CRIU_PATH) \
+		$(LLVM_COV) test \
+		--lcov --output-path $(COVERAGE_PATH)/coverage.lcov \
 		--ignore-filename-regex='\.cargo|rustc|rust_criu_protobuf/rpc\.rs' \
-		> $(COVERAGE_PATH)/coverage.lcov
+		-- --test-threads=1
 	@echo ""
 	@echo "Coverage data written to $(COVERAGE_PATH)/"
 	@echo "  - LCOV format: $(COVERAGE_PATH)/coverage.lcov"
@@ -97,25 +79,14 @@ coverage-html:
 	mkdir -p $(COVERAGE_PATH)
 	# Clean any previous coverage data
 	$(LLVM_COV) clean --workspace
-	# Build instrumented test binary (includes piggie test process)
-	CARGO_INCREMENTAL=0 \
-	RUSTFLAGS="-C instrument-coverage" \
-	LLVM_PROFILE_FILE="$(COVERAGE_PATH)/rust-criu-%p-%m.profraw" \
-	GENERATE_TEST_PROCESS=1 \
-		$(CARGO) build
-	# Run integration tests with instrumented binary (requires sudo)
-	sudo LLVM_PROFILE_FILE="$(COVERAGE_PATH)/rust-criu-%p-%m.profraw" \
-		target/debug/rust-criu-test $(CRIU_PATH)
-	# Merge profraw files
-	llvm-profdata merge -sparse $(COVERAGE_PATH)/rust-criu-*.profraw \
-		-o $(COVERAGE_PATH)/rust-criu.profdata
-	# Generate HTML report
-	llvm-cov show \
-		--format=html \
-		--instr-profile=$(COVERAGE_PATH)/rust-criu.profdata \
-		--object target/debug/rust-criu-test \
+	# Build test processes (piggie, loop, loop_pts)
+	GENERATE_TEST_PROCESS=1 $(CARGO) build
+	# Run integration tests with coverage (requires root for CRIU)
+	sudo -E env PATH=$(PATH) CRIU_BINARY=$(CRIU_PATH) \
+		$(LLVM_COV) test \
+		--html --output-dir $(COVERAGE_PATH)/html \
 		--ignore-filename-regex='\.cargo|rustc|rust_criu_protobuf/rpc\.rs' \
-		--output-dir=$(COVERAGE_PATH)/html
+		-- --test-threads=1
 	@echo ""
 	@echo "HTML report: $(COVERAGE_PATH)/html/index.html"
 

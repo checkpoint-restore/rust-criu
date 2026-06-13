@@ -36,7 +36,7 @@ impl Drop for ImgDirGuard {
 }
 
 /// Action script order test: record script names and verify sequence.
-pub fn action_script_test(criu_bin_path: &str) {
+fn action_script_test(criu_bin_path: &str) {
     println!("Running action script test");
     RECORDED_ACTIONS.get_or_init(|| Mutex::new(Vec::new()));
     RECORDED_ACTIONS.get().unwrap().lock().unwrap().clear();
@@ -81,9 +81,7 @@ pub fn action_script_test(criu_bin_path: &str) {
 
     println!("Dumping PID {}", pid);
     if let Err(e) = criu.dump() {
-        unsafe {
-            libc::kill(pid, libc::SIGKILL);
-        }
+        unsafe { libc::kill(pid, libc::SIGKILL) };
         let _ = child.wait();
         panic!("Dumping process failed with {:#?}", e);
     }
@@ -109,4 +107,11 @@ pub fn action_script_test(criu_bin_path: &str) {
         recorded, EXPECTED_ACTIONS_DUMP_RESTORE,
         "Action script order mismatch"
     );
+}
+
+#[test]
+fn action_script() {
+    let criu_bin_path =
+        std::env::var("CRIU_BINARY").expect("CRIU_BINARY must be set to run integration tests");
+    action_script_test(&criu_bin_path);
 }

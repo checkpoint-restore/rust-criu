@@ -8,7 +8,7 @@ use std::time::Duration;
 /// internally. Parent dumps the child (slave only, master stays in parent). On restore,
 /// CRIU sends "orphan-pts-master" notify with the new master fd; the library stores it
 /// and we retrieve it with take_orphan_pts_master_fd() after restore().
-pub fn orphan_pts_master_test(criu_bin_path: &str) {
+fn orphan_pts_master_test(criu_bin_path: &str) {
     if unsafe { libc::geteuid() } != 0 {
         println!("Running orphan_pts_master_test: skip (not root)");
         return;
@@ -163,4 +163,11 @@ pub fn orphan_pts_master_test(criu_bin_path: &str) {
 
     println!("Cleaning up");
     let _ = std::fs::remove_dir_all(img_dir);
+}
+
+#[test]
+fn orphan_pts_master() {
+    let criu_bin_path =
+        std::env::var("CRIU_BINARY").expect("CRIU_BINARY must be set to run integration tests");
+    orphan_pts_master_test(&criu_bin_path);
 }
