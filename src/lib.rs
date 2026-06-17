@@ -284,7 +284,7 @@ impl Criu {
         msg.msg_iov = &mut iov;
         msg.msg_iovlen = 1;
         msg.msg_control = cmsg_buf.as_mut_ptr().cast::<libc::c_void>();
-        msg.msg_controllen = cmsg_space;
+        msg.msg_controllen = cmsg_space as _;
 
         let n = unsafe {
             let ret = libc::recvmsg(fd, &mut msg, libc::MSG_TRUNC);
@@ -803,7 +803,7 @@ mod tests {
         msg.msg_iov = &mut iov;
         msg.msg_iovlen = 1;
         msg.msg_control = cmsg_buf.as_mut_ptr().cast::<libc::c_void>();
-        msg.msg_controllen = cmsg_space;
+        msg.msg_controllen = cmsg_space as _;
         unsafe {
             let cmsg = libc::CMSG_FIRSTHDR(&msg);
             (*cmsg).cmsg_level = libc::SOL_SOCKET;

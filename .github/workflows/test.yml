@@ -78,3 +78,21 @@ jobs:
 
     - name: Run tests
       run: sudo -E env PATH=$PATH CRIU_BINARY=criu/criu/criu cargo test -- --test-threads=1
+
+  test-aarch64:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: checkout
+      uses: actions/checkout@v6
+
+    - name: Install cross
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cross
+
+    - name: Build for aarch64-unknown-linux-musl
+      run: cross build --target aarch64-unknown-linux-musl --verbose
+
+    - name: Run clippy for aarch64-unknown-linux-musl
+      run: cross clippy --target aarch64-unknown-linux-musl --verbose --all-targets --all-features -- -D warnings
