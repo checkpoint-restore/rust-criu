@@ -254,7 +254,7 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
 name = "rust-criu"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "libc",
  "nix",
