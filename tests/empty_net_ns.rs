@@ -54,7 +54,7 @@ fn empty_net_ns_test(criu_bin_path: &str) {
     let pid = Pid::from_raw(pid_raw);
 
     let netns_path = format!("/proc/{}/ns/net", pid_raw);
-    let netns_option = format!("--net={}", &netns_path);
+    let netns_option = format!("--net={}", netns_path);
 
     // Use tun device (not lo with extra IP) because lo state is always restored
     // by CRIU regardless of empty_ns. Dummy is unsupported by CRIU.
