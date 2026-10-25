@@ -1,12 +1,13 @@
-extern crate protobuf_codegen;
-
 fn main() {
     if std::env::var_os("GENERATE_PROTOBUF").is_some() {
+        #[cfg(feature = "protobuf-codegen")]
         protobuf_codegen::Codegen::new()
             .includes(["proto"])
             .input("proto/rpc.proto")
             .out_dir("src/rust_criu_protobuf")
             .run_from_script();
+        #[cfg(not(feature = "protobuf-codegen"))]
+        panic!("GENERATE_PROTOBUF requires the protobuf-codegen feature");
     }
 
     if std::env::var_os("GENERATE_TEST_PROCESS").is_some() {
