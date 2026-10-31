@@ -13,7 +13,7 @@ thiserror = "2"
 protobuf = "= 3.7.2"
 
 [build-dependencies]
-protobuf-codegen = "= 3.7.2"
+protobuf-codegen = { version = "= 3.7.2", optional = true }
 
 [dev-dependencies]
 nix = { version = "0.31", features = ["fs", "sched", "signal", "process", "user"] }

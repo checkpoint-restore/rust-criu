@@ -74,7 +74,7 @@ jobs:
       run: cargo fmt --all -- --check
 
     - name: Build with generate enabled
-      run: GENERATE_PROTOBUF=1 GENERATE_TEST_PROCESS=1 cargo build --verbose
+      run: GENERATE_PROTOBUF=1 GENERATE_TEST_PROCESS=1 cargo build --verbose --features protobuf-codegen
 
     - name: Run tests
       run: sudo -E env PATH=$PATH CRIU_BINARY=criu/criu/criu cargo test -- --test-threads=1

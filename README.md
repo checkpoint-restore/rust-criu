@@ -12,7 +12,7 @@ The CRIU RPC protobuf bindings are pre-generated and part of the rust-criu
 repository. The bindings can be re-generated with
 
 ```shell
-GENERATE_PROTOBUF=1 cargo build
+GENERATE_PROTOBUF=1 cargo build --features protobuf-codegen
 ```
 
 ## Run tests
