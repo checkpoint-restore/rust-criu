@@ -35,6 +35,9 @@ shellcheck:
 	shellcheck -o all test/prepare-fedora-coverage-environment.sh
 
 shfmt:
+	shfmt -d test/prepare-fedora-coverage-environment.sh
+
+shfmt-fix:
 	shfmt -w test/prepare-fedora-coverage-environment.sh
 
 # Integration test - requires root and CRIU
@@ -90,5 +93,5 @@ coverage-html:
 	@echo ""
 	@echo "HTML report: $(COVERAGE_PATH)/html/index.html"
 
-.PHONY: all build release test clippy fmt fmt-fix shellcheck shfmt
+.PHONY: all build release test clippy fmt fmt-fix shellcheck shfmt shfmt-fix
 .PHONY: integration-test clean coverage coverage-html
