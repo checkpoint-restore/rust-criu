@@ -57,7 +57,16 @@ jobs:
         run: make ${{ matrix.target }}
 
   test:
-    runs-on: ubuntu-24.04
+    name: test (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            musl-target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            musl-target: aarch64-unknown-linux-musl
 
     steps:
 
@@ -71,13 +80,26 @@ jobs:
         sudo apt-get install -y libprotobuf-dev libprotobuf-c-dev protobuf-c-compiler protobuf-compiler python3-protobuf libnl-3-dev libnet1-dev libcap-dev uuid-dev
         git clone --single-branch -b criu-dev https://github.com/checkpoint-restore/criu.git
         make -C criu -j $(nproc)
-        # Latest CRIU release is already part of the github actions image
 
     - name: Build
       run: cargo build --verbose
 
     - name: Run clippy
       run: cargo clippy --verbose --all-targets --all-features -- -D warnings
+
+    # musl declares some libc struct fields with other types than glibc.
+    # For example, msghdr.msg_controllen is a socklen_t on musl and a
+    # size_t on glibc. The musl build fails on code that only compiles
+    # against glibc. cargo build and cargo clippy do not link this
+    # library, so the job needs no musl C toolchain.
+    - name: Install the ${{ matrix.musl-target }} target
+      run: rustup target add ${{ matrix.musl-target }}
+
+    - name: Build for ${{ matrix.musl-target }}
+      run: cargo build --verbose --target ${{ matrix.musl-target }}
+
+    - name: Run clippy for ${{ matrix.musl-target }}
+      run: cargo clippy --verbose --target ${{ matrix.musl-target }} --all-targets --all-features -- -D warnings
 
     - name: Run fmt
       run: cargo fmt --all -- --check
@@ -87,21 +109,3 @@ jobs:
 
     - name: Run tests
       run: sudo -E env PATH=$PATH CRIU_BINARY=criu/criu/criu cargo test -- --test-threads=1 --show-output
-
-  test-aarch64:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: checkout
-      uses: actions/checkout@v7
-
-    - name: Install cross
-      uses: taiki-e/install-action@v2.90.2
-      with:
-        tool: cross
-
-    - name: Build for aarch64-unknown-linux-musl
-      run: cross build --target aarch64-unknown-linux-musl --verbose
-
-    - name: Run clippy for aarch64-unknown-linux-musl
-      run: cross clippy --target aarch64-unknown-linux-musl --verbose --all-targets --all-features -- -D warnings
