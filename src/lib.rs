@@ -105,6 +105,7 @@ pub struct Criu {
     link_remap: Option<bool>,
     auto_dedup: Option<bool>,
     parent_img: Option<String>,
+    track_mem: Option<bool>,
     status_fd: Option<i32>,
     lazy_pages: Option<bool>,
     page_server: Option<(String, i32)>,
@@ -147,6 +148,7 @@ impl Criu {
             link_remap: None,
             auto_dedup: None,
             parent_img: None,
+            track_mem: None,
             status_fd: None,
             lazy_pages: None,
             page_server: None,
@@ -530,6 +532,13 @@ impl Criu {
         self.parent_img = Some(parent_img);
     }
 
+    /// CRIU skips unchanged pages only when a dump sets both `track_mem` and
+    /// `parent_img`. The parent dump must also set `track_mem`, because CRIU
+    /// resets the soft-dirty bits only on a dump that sets `track_mem`.
+    pub fn set_track_mem(&mut self, track_mem: bool) {
+        self.track_mem = Some(track_mem);
+    }
+
     pub fn set_status_fd(&mut self, status_fd: i32) {
         self.status_fd = Some(status_fd);
     }
@@ -676,6 +685,10 @@ impl Criu {
             criu_opts.set_parent_img(parent_img.clone());
         }
 
+        if let Some(track_mem) = self.track_mem {
+            criu_opts.set_track_mem(track_mem);
+        }
+
         if let Some(status_fd) = self.status_fd {
             criu_opts.set_status_fd(status_fd);
         }
@@ -723,6 +736,7 @@ impl Criu {
         self.link_remap = None;
         self.auto_dedup = None;
         self.parent_img = None;
+        self.track_mem = None;
         self.status_fd = None;
         self.lazy_pages = None;
         self.page_server = None;
@@ -898,6 +912,25 @@ mod tests {
         let mut opts = rpc::Criu_opts::default();
         criu.fill_criu_opts(&mut opts);
         assert!(!opts.has_parent_img());
+    }
+
+    #[test]
+    fn set_track_mem_fills_criu_opts() {
+        let mut criu = Criu::new().unwrap();
+        criu.set_track_mem(true);
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(opts.track_mem());
+    }
+
+    #[test]
+    fn track_mem_default_not_set() {
+        let mut criu = Criu::new().unwrap();
+
+        let mut opts = rpc::Criu_opts::default();
+        criu.fill_criu_opts(&mut opts);
+        assert!(!opts.has_track_mem());
     }
 
     #[test]
