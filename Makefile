@@ -65,7 +65,7 @@ coverage:
 	mkdir -p $(COVERAGE_PATH)
 	# Clean any previous coverage data
 	$(LLVM_COV) clean --workspace
-	# Build test processes (piggie, loop, loop_pts)
+	# Build test processes (piggie, loop, loop_pts, loop_mem)
 	GENERATE_TEST_PROCESS=1 $(CARGO) build
 	# Run integration tests with coverage (requires root for CRIU)
 	sudo -E env PATH=$(PATH) CRIU_BINARY=$(CRIU_PATH) \
@@ -82,7 +82,7 @@ coverage-html:
 	mkdir -p $(COVERAGE_PATH)
 	# Clean any previous coverage data
 	$(LLVM_COV) clean --workspace
-	# Build test processes (piggie, loop, loop_pts)
+	# Build test processes (piggie, loop, loop_pts, loop_mem)
 	GENERATE_TEST_PROCESS=1 $(CARGO) build
 	# Run integration tests with coverage (requires root for CRIU)
 	sudo -E env PATH=$(PATH) CRIU_BINARY=$(CRIU_PATH) \
