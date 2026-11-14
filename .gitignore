@@ -2,4 +2,5 @@
 test/piggie
 test/loop
 test/loop_pts
+test/loop_mem
 .coverage
