@@ -23,10 +23,15 @@ fn main() {
             .args(["test/loop_pts.c", "-o", "test/loop_pts"])
             .status()
             .unwrap();
+        std::process::Command::new("gcc")
+            .args(["test/loop_mem.c", "-o", "test/loop_mem"])
+            .status()
+            .unwrap();
     }
     println!("cargo:rerun-if-changed=test/piggie.c");
     println!("cargo:rerun-if-changed=test/loop.c");
     println!("cargo:rerun-if-changed=test/loop_pts.c");
+    println!("cargo:rerun-if-changed=test/loop_mem.c");
     println!("cargo:rerun-if-changed=proto/rpc.proto");
     println!("cargo:rerun-if-env-changed=GENERATE_PROTOBUF");
     println!("cargo:rerun-if-env-changed=GENERATE_TEST_PROCESS");
