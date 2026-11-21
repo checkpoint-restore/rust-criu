@@ -192,7 +192,10 @@ impl Criu {
 
         let mut cmd = Command::new(self.criu_path.clone());
         cmd.arg("swrk").arg(format!("{}", self.sv[1]));
-        cmd.stdin(Stdio::null())
+        // Inherit stdio like libcriu and runc do. CRIU resolves inherit_fd
+        // numbers in its own fd table, so a pipe registered as fd 0 (e.g. a
+        // container's stdin) must still be fd 0 in criu swrk.
+        cmd.stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
 
