@@ -16,7 +16,7 @@ protobuf = "= 3.7.2"
 protobuf-codegen = { version = "= 3.7.2", optional = true }
 
 [dev-dependencies]
-nix = { version = "0.31", features = ["fs", "sched", "signal", "process", "user"] }
+nix = { version = "0.32", features = ["fs", "sched", "signal", "process", "user"] }
 
 [lib]
 name = "rust_criu"
